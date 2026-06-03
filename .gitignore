@@ -44,3 +44,10 @@ env/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# ============================================
+# 测试 & 覆盖率
+# ============================================
+.coverage
+coverage.xml
+.pytest_cache/
