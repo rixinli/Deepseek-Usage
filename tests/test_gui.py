@@ -197,12 +197,13 @@ class TestSettingsDialogCallback:
         app.status_var = MagicMock()
         app._refresh_status_bar = MagicMock()
 
-        app._on_settings_saved(
-            api_key="sk-new-key",
-            interval=300,
-            startup_enabled=True,
-            auto_monitor=True,
-        )
+        with patch("src.gui.is_startup_enabled", return_value=True):
+            app._on_settings_saved(
+                api_key="sk-new-key",
+                interval=300,
+                startup_enabled=True,
+                auto_monitor=True,
+            )
 
         assert app.config.api_key == "sk-new-key"
         assert app.config.refresh_interval == 300
