@@ -7,6 +7,9 @@
 启动逻辑:
     - 所有开机自启动管理已移至 GUI 内部（设置对话框 + 首次运行提示）
     - 本文件仅负责创建窗口并启动 tkinter 主循环
+
+命令行参数:
+    --mock      使用模拟 API 数据运行（离线预览，无需真实 API Key）
 """
 
 import sys
@@ -18,11 +21,16 @@ _SRC_DIR = Path(__file__).resolve().parent / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from src.gui import DeepSeekAPIMonitor  # noqa: E402
+from src.monitor import set_mock_mode  # noqa: E402
 
 
 def main() -> None:
     """应用程序主入口。"""
+    # 解析命令行参数
+    if "--mock" in sys.argv:
+        set_mock_mode(True)
+        print("[DEV] Mock API 模式已启用 — 使用模拟数据运行")
+
     root = tk.Tk()
 
     # 尝试设置窗口图标
@@ -34,6 +42,7 @@ def main() -> None:
         pass
 
     # 创建应用（GUI 内部处理所有启动逻辑）
+    from src.gui import DeepSeekAPIMonitor  # noqa: E402
     DeepSeekAPIMonitor(root)
 
     # 启动主循环

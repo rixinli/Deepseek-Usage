@@ -31,7 +31,9 @@ env/
 # ============================================
 # IDE / 编辑器
 # ============================================
-.vscode/
+# VS Code — 仅忽略含密钥的 settings，共享 launch/tasks 配置
+.vscode/settings.json
+.vscode/settings.local.json
 .idea/
 *.swp
 *.swo

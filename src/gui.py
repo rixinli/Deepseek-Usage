@@ -9,7 +9,7 @@ from tkinter import messagebox, scrolledtext
 from typing import Any
 
 from .config import AppConfig, is_dev_mode, load_env_file
-from .monitor import format_quota_info, get_api_quota
+from .monitor import format_quota_info, get_api_quota, is_mock_mode
 from .settings_dialog import SettingsDialog
 from .setup_wizard import SetupWizard
 
@@ -306,9 +306,15 @@ class DeepSeekAPIMonitor:
             frame, text=startup_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
 
-        mode_text = "v2.3.0 dev" if _IS_DEV else "v2.3.0"
+        mode_parts = ["v2.3.0"]
+        if _IS_DEV:
+            mode_parts.append("dev")
+        if is_mock_mode():
+            mode_parts.append("mock")
+        mode_text = " ".join(mode_parts)
+        fg = "#ff6b35" if is_mock_mode() else "gray"
         tk.Label(
-            frame, text=mode_text, font=("Arial", 8), fg="gray",
+            frame, text=mode_text, font=("Arial", 8), fg=fg,
         ).pack(side=tk.RIGHT, padx=5)
 
     # ── 设置对话框 ─────────────────────────────────────────
@@ -464,7 +470,9 @@ class DeepSeekAPIMonitor:
         messagebox.showinfo(
             "关于 DeepSeek API 额度监控",
             "DeepSeek API 额度监控\n\n"
-            f"版本: v2.3.0{' (开发模式)' if _IS_DEV else ''}\n\n"
+            f"版本: v2.3.0"
+            f"{' (开发模式)' if _IS_DEV else ''}"
+            f"{' (Mock)' if is_mock_mode() else ''}\n\n"
             "实时监控 DeepSeek API 账户余额。\n"
             "支持开机自启动、定时刷新、设置持久化。\n\n"
             "开源协议: MIT",

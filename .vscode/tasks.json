@@ -1,0 +1,101 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🧪 运行测试",
+            "type": "shell",
+            "command": "python",
+            "args": ["-m", "pytest", "tests/", "-v", "--tb=short"],
+            "group": "test",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "🧪 测试 + 覆盖率",
+            "type": "shell",
+            "command": "python",
+            "args": ["-m", "pytest", "tests/", "-v", "--cov=src", "--cov-report=term-missing"],
+            "group": "test",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "🔍 Ruff 检查",
+            "type": "shell",
+            "command": "ruff",
+            "args": ["check", "src/"],
+            "group": "none",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "🔍 Ruff 检查 + 自动修复",
+            "type": "shell",
+            "command": "ruff",
+            "args": ["check", "src/", "--fix"],
+            "group": "none",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "📦 构建 EXE (PyInstaller)",
+            "type": "shell",
+            "command": "python",
+            "args": ["-m", "PyInstaller", "DeepSeek_API_Monitor.spec"],
+            "group": "build",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "📦 完整构建 (EXE + 复制配置)",
+            "type": "shell",
+            "command": "python",
+            "args": ["scripts/build.py"],
+            "group": "build",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "▶ 运行应用",
+            "type": "shell",
+            "command": "python",
+            "args": ["deepseek_api_monitor.py"],
+            "group": "none",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "▶ 运行应用 (Mock 模式)",
+            "type": "shell",
+            "command": "python",
+            "args": ["deepseek_api_monitor.py", "--mock"],
+            "group": "none",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

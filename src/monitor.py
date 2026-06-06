@@ -2,6 +2,9 @@
 
 所有函数均为无副作用的纯函数（除了 get_api_quota 涉及的 HTTP 调用），
 方便进行单元测试。
+
+Mock 模式: 设置 _MOCK_MODE = True 后，get_api_quota 返回模拟数据，
+          无需真实 API Key 即可预览完整 UI。
 """
 
 import json
@@ -9,6 +12,42 @@ from datetime import datetime
 from typing import Any
 
 import requests
+
+# ── Mock 模式开关 ─────────────────────────────────────────
+_MOCK_MODE = False
+
+
+def set_mock_mode(enabled: bool = True) -> None:
+    """启用/禁用 Mock 模式。"""
+    global _MOCK_MODE
+    _MOCK_MODE = enabled
+
+
+def is_mock_mode() -> bool:
+    """返回当前是否处于 Mock 模式。"""
+    return _MOCK_MODE
+
+
+def _mock_balance_data() -> dict[str, Any]:
+    """生成模拟的余额数据（用于 UI 预览和开发调试）。"""
+    return {
+        "is_available": True,
+        "balance_infos": [
+            {
+                "currency": "CNY",
+                "total_balance": "12.50",
+                "granted_balance": "10.00",
+                "topped_up_balance": "2.50",
+            },
+            {
+                "currency": "USD",
+                "total_balance": "1.72",
+                "granted_balance": "1.38",
+                "topped_up_balance": "0.34",
+            },
+        ],
+        "_endpoint": "https://api.deepseek.com/user/balance (Mock)",
+    }
 
 
 def get_api_quota(
@@ -28,6 +67,10 @@ def get_api_quota(
         - 成功时: is_available, balance_infos, _endpoint
         - 失败时: error, note (可选)
     """
+    # Mock 模式 — 直接返回模拟数据
+    if _MOCK_MODE:
+        return _mock_balance_data()
+
     if not api_key:
         return {"error": "请先输入 API Key"}
 
