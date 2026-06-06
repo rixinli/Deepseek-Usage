@@ -178,7 +178,7 @@ jobs:
           retention-days: 1
 
   # ═══════════════════════════════════════════════════════════════
-  # Job 3: 创建 GitHub Release
+  # Job 3: 创建 GitHub Release + Gitee Release（国内镜像）
   # ═══════════════════════════════════════════════════════════════
   create-release:
     needs: [build-exe, build-installer]
@@ -249,3 +249,78 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 同步到 Gitee Release（国内用户满速下载）──────
+
+      - name: Sync to Gitee Release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          $giteeOwner = "Rixinlouis"
+          $giteeRepo = "Deepseek-Usage"
+          $tagName = "${{ github.ref_name }}"
+          $releaseName = "DeepSeek API Monitor $tagName"
+
+          # 复用 GitHub Release 的描述
+          $releaseBody = @"
+          ## DeepSeek API 额度监控 $tagName
+
+          ### 📦 下载
+
+          - **安装包**: 下载 `*_Setup.exe`, 一键安装（推荐 ✨）
+            - 标准 Windows 安装向导，可选择安装路径
+            - 创建开始菜单快捷方式和桌面快捷方式
+            - 配置自动保存到 `%APPDATA%`，卸载时可选择保留
+          - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
+            - 无需安装，配置保存在 EXE 同级目录
+
+          ### ✨ 更新内容
+
+          查看 [CHANGELOG.md](https://gitee.com/$giteeOwner/$giteeRepo/blob/main/CHANGELOG.md) 了解完整更新日志。
+
+          ### 📖 使用说明
+
+          查看 [用户指南](https://gitee.com/$giteeOwner/$giteeRepo/blob/main/docs/USER_GUIDE_CN.md)。
+
+          ### 🔧 系统要求
+
+          - Windows 10/11
+          - 无需安装 Python
+          "@
+
+          Write-Host "Creating Gitee release..."
+          $createBody = @{
+            access_token = $env:GITEE_TOKEN
+            tag_name = $tagName
+            name = $releaseName
+            body = $releaseBody
+            target_commitish = "main"
+            prerelease = $false
+          } | ConvertTo-Json
+
+          $response = Invoke-RestMethod `
+            -Uri "https://gitee.com/api/v5/repos/$giteeOwner/$giteeRepo/releases" `
+            -Method Post `
+            -ContentType "application/json" `
+            -Body $createBody
+
+          $releaseId = $response.id
+          Write-Host "Gitee release created (id=$releaseId)"
+
+          # 上传所有构建产物
+          $files = Get-ChildItem release-files/ -File
+          foreach ($file in $files) {
+            Write-Host "Uploading $($file.Name)..."
+            $uploadUrl = "https://gitee.com/api/v5/repos/$giteeOwner/$giteeRepo/releases/$releaseId/attach_files"
+            Invoke-RestMethod `
+              -Uri $uploadUrl `
+              -Method Post `
+              -Form @{
+                access_token = $env:GITEE_TOKEN
+                file = Get-Item $file.FullName
+              }
+            Write-Host "  ✅ $($file.Name) uploaded"
+          }
+
+          Write-Host "✅ All files synced to Gitee Release"
+          Write-Host "🔗 https://gitee.com/$giteeOwner/$giteeRepo/releases"
