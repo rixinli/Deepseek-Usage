@@ -4,10 +4,10 @@
     python scripts/sync_to_gitee.py <tag> <release_body_file> <asset_dir>
 
 需要环境变量:
-    GITEE_TOKEN — Gitee 个人访问令牌
+    GITEE_TOKEN -- Gitee 个人访问令牌
 
 依赖:
-    requests (GitHub Actions runner 预装)
+    requests
 """
 
 import json
@@ -25,7 +25,6 @@ BASE = f"https://gitee.com/api/v5/repos/{OWNER}/{REPO}/releases"
 
 def create_release(token: str, tag: str, body: str) -> int:
     """创建 Gitee Release，返回 release_id。若已存在则复用。"""
-    # 先查是否已存在
     resp = requests.get(BASE, params={"access_token": token})
     resp.raise_for_status()
     releases = resp.json()
@@ -34,7 +33,6 @@ def create_release(token: str, tag: str, body: str) -> int:
         print(f"Release already exists (id={existing['id']}), reusing")
         return existing["id"]
 
-    # 创建新 release
     print(f"Creating release for {tag}...")
     resp = requests.post(
         BASE,
@@ -71,14 +69,14 @@ def upload_file(token: str, release_id: int, filepath: Path) -> bool:
                 timeout=600,
             )
         elapsed = time.time() - t0
-        if resp.status_code == 200 or resp.status_code == 201:
-            print(f"✅ ({elapsed:.0f}s)")
+        if resp.status_code in (200, 201):
+            print(f"[OK] ({elapsed:.0f}s)")
             return True
         else:
-            print(f"❌ HTTP {resp.status_code}: {resp.text[:200]}")
+            print(f"[FAIL] HTTP {resp.status_code}: {resp.text[:200]}")
             return False
     except requests.RequestException as e:
-        print(f"❌ {e}")
+        print(f"[FAIL] {e}")
         return False
 
 
@@ -89,7 +87,7 @@ def main():
 
     token = os.environ.get("GITEE_TOKEN", "")
     if not token:
-        print("❌ GITEE_TOKEN environment variable not set")
+        print("[FAIL] GITEE_TOKEN environment variable not set")
         sys.exit(1)
 
     tag = sys.argv[1]
@@ -97,10 +95,10 @@ def main():
     asset_dir = Path(sys.argv[3])
 
     if not body_file.exists():
-        print(f"❌ Body file not found: {body_file}")
+        print(f"[FAIL] Body file not found: {body_file}")
         sys.exit(1)
     if not asset_dir.is_dir():
-        print(f"❌ Asset dir not found: {asset_dir}")
+        print(f"[FAIL] Asset dir not found: {asset_dir}")
         sys.exit(1)
 
     body = body_file.read_text(encoding="utf-8")
@@ -120,11 +118,11 @@ def main():
             failed.append(asset.name)
 
     if failed:
-        print(f"\n⚠️  {len(failed)} file(s) failed: {', '.join(failed)}")
+        print(f"\n[WARN] {len(failed)} file(s) failed: {', '.join(failed)}")
         sys.exit(1)
     else:
-        print(f"\n✅ All {len(assets)} files uploaded")
-        print(f"🔗 https://gitee.com/{OWNER}/{REPO}/releases")
+        print(f"\n[OK] All {len(assets)} files uploaded")
+        print(f"https://gitee.com/{OWNER}/{REPO}/releases")
 
 
 if __name__ == "__main__":
