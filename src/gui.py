@@ -11,6 +11,7 @@ from typing import Any
 from .config import AppConfig, is_dev_mode, load_env_file
 from .monitor import format_quota_info, get_api_quota
 from .settings_dialog import SettingsDialog
+from .setup_wizard import SetupWizard
 
 # ── 模块级初始化（导入时执行一次）──────────────────────────
 _IS_DEV = is_dev_mode()
@@ -130,8 +131,11 @@ class DeepSeekAPIMonitor:
         self._setup_menu()
         self.setup_ui()
 
-        # 智能启动提示 — 仅首次询问开机自启动
-        if not self.config.startup_asked:
+        # 首次运行 — 无 API Key 时显示设置向导
+        if not self.config.api_key:
+            self.root.after(500, self._show_setup_wizard)
+        elif not self.config.startup_asked:
+            # 有 API Key 但首次运行 — 仅询问开机自启动
             self.root.after(1000, self._ask_startup_on_first_run)
 
         # 自动开始监控（根据设置）
@@ -302,7 +306,7 @@ class DeepSeekAPIMonitor:
             frame, text=startup_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
 
-        mode_text = "v2.2 dev" if _IS_DEV else "v2.2"
+        mode_text = "v2.2.1 dev" if _IS_DEV else "v2.2.1"
         tk.Label(
             frame, text=mode_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
@@ -332,7 +336,8 @@ class DeepSeekAPIMonitor:
         self.config.auto_monitor = auto_monitor
 
         # 保存到文件
-        self.config.save(api_key, interval)
+        if not self.config.save(api_key, interval):
+            self.status_var.set("⚠️ 配置文件保存失败，设置可能不会持久化")
 
         # 处理开机自启动
         if startup_enabled:
@@ -365,7 +370,8 @@ class DeepSeekAPIMonitor:
     def _ask_startup_on_first_run(self) -> None:
         """首次运行时询问是否启用开机自启动（仅询问一次）。"""
         self.config.startup_asked = True
-        self.config.save()
+        if not self.config.save():
+            pass  # 非关键，首次保存失败不影响后续操作
 
         response = messagebox.askyesno(
             "开机自启动",
@@ -376,7 +382,11 @@ class DeepSeekAPIMonitor:
         if response:
             if create_startup_shortcut():
                 self.config.startup_enabled = True
-                self.config.save()
+                if not self.config.save():
+                    messagebox.showwarning(
+                        "警告",
+                        "配置保存失败，开机自启动设置可能不会持久化。",
+                    )
                 self.status_var.set("✅ 已启用开机自启动")
             else:
                 messagebox.showwarning(
@@ -387,6 +397,48 @@ class DeepSeekAPIMonitor:
         else:
             self.config.startup_enabled = False
             self.config.save()
+
+    # ── 首次设置向导 ───────────────────────────────────────
+
+    def _show_setup_wizard(self) -> None:
+        """显示首次运行设置向导。"""
+
+        def on_complete(
+            api_key: str, interval: int, startup_enabled: bool, auto_monitor: bool,
+        ) -> None:
+            # 更新配置
+            self.config.api_key = api_key
+            self.config.refresh_interval = interval
+            self.config.startup_enabled = startup_enabled
+            self.config.auto_monitor = auto_monitor
+            self.config.startup_asked = True
+            self.config.save(api_key, interval)
+
+            # 处理开机自启动
+            if startup_enabled:
+                if not is_startup_enabled():
+                    create_startup_shortcut()
+
+            # 刷新 UI
+            self.api_key_entry.delete(0, tk.END)
+            self.api_key_entry.insert(0, api_key)
+            self.interval_var.set(str(interval))
+            self._refresh_status_bar()
+
+            # 自动开始监控
+            if auto_monitor and api_key:
+                self.status_var.set("✅ 设置完成 — 正在开始监控...")
+                self.root.after(300, self.auto_start_monitoring)
+            else:
+                self.status_var.set("✅ 设置完成")
+
+        SetupWizard(
+            parent=self.root,
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            refresh_interval=self.config.refresh_interval,
+            on_complete=on_complete,
+        )
 
     # ── 帮助 & 关于 ─────────────────────────────────────────
 
@@ -412,7 +464,7 @@ class DeepSeekAPIMonitor:
         messagebox.showinfo(
             "关于 DeepSeek API 额度监控",
             "DeepSeek API 额度监控\n\n"
-            f"版本: v2.2{' (开发模式)' if _IS_DEV else ''}\n\n"
+            f"版本: v2.2.1{' (开发模式)' if _IS_DEV else ''}\n\n"
             "实时监控 DeepSeek API 账户余额。\n"
             "支持开机自启动、定时刷新、设置持久化。\n\n"
             "开源协议: MIT",
@@ -454,6 +506,13 @@ class DeepSeekAPIMonitor:
         if self.config.save(api_key, interval):
             self.status_var.set("✅ 设置已保存")
             messagebox.showinfo("成功", "设置已成功保存到配置文件")
+        else:
+            self.status_var.set("❌ 设置保存失败")
+            messagebox.showerror(
+                "错误",
+                "配置文件写入失败，请检查权限或磁盘空间。\n"
+                f"配置路径: {self.config.config_file}",
+            )
 
     def auto_start_monitoring(self) -> None:
         """自动启动监控（如果已配置 API key）。"""

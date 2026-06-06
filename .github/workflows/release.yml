@@ -15,8 +15,13 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # ═══════════════════════════════════════════════════════════════
+  # Job 1: 构建 EXE 和便携版 ZIP
+  # ═══════════════════════════════════════════════════════════════
+  build-exe:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
 
     steps:
       - uses: actions/checkout@v4
@@ -44,8 +49,7 @@ jobs:
       - name: Verify EXE exists
         run: |
           if (Test-Path dist/DeepSeek_API_Monitor.exe) {
-            Write-Host "✅ EXE built successfully"
-            (Get-Item dist/DeepSeek_API_Monitor.exe).Length
+            Write-Host "✅ EXE built successfully ($((Get-Item dist/DeepSeek_API_Monitor.exe).Length) bytes)"
           } else {
             Write-Error "❌ EXE not found"
             exit 1
@@ -58,55 +62,144 @@ jobs:
             exit 1
           }
           Copy-Item deepseek_config.ini.example dist/deepseek_config.ini.example
-          Write-Host "✅ Config template copied to dist/"
+          Write-Host "✅ Config template copied"
 
-      - name: Install Inno Setup
-        run: |
-          choco install innosetup --no-progress -y
-        continue-on-error: true
-
-      - name: Build installer with Inno Setup
-        run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/setup.iss
-        continue-on-error: true
-
-      - name: List build artifacts
-        run: |
-          Write-Host "=== EXE ==="
-          Get-ChildItem dist/DeepSeek_API_Monitor.exe | Select-Object Name, Length
-          Write-Host "=== Installer ==="
-          if (Test-Path dist/installer/) {
-            Get-ChildItem dist/installer/*.exe | Select-Object Name, Length
-          } else {
-            Write-Host "Installer not built (Inno Setup not available)"
-          }
-
-      - name: Create ZIP archive
+      - name: Create portable ZIP
         run: |
           $items = @("dist/DeepSeek_API_Monitor.exe", "dist/deepseek_config.ini.example")
           $missing = $items | Where-Object { -not (Test-Path $_) }
           if ($missing) {
-            Write-Error "❌ Missing files for ZIP: $($missing -join ', ')"
+            Write-Error "❌ Missing files: $($missing -join ', ')"
             exit 1
           }
           Compress-Archive -Path $items -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
-          Write-Host "✅ ZIP created: dist/DeepSeek_API_Monitor_portable.zip"
+          Write-Host "✅ Portable ZIP created"
 
-      - name: Upload EXE artifact
+      - name: Extract version
+        id: version
+        run: |
+          $version = (python -c "import re; m = re.search(r'version\s*=\s*\"([^\"]+)\"', open('pyproject.toml').read()); print(m.group(1) if m else '0.0.0')")
+          Write-Host "Version: $version"
+          echo "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Upload EXE & ZIP artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DeepSeek_API_Monitor
+          name: build-artifacts
           path: |
             dist/DeepSeek_API_Monitor.exe
             dist/DeepSeek_API_Monitor_portable.zip
             dist/deepseek_config.ini.example
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 2: 构建 Windows 安装包 (Inno Setup)
+  # ═══════════════════════════════════════════════════════════════
+  build-installer:
+    needs: build-exe
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Verify downloaded EXE
+        run: |
+          if (-not (Test-Path dist/DeepSeek_API_Monitor.exe)) {
+            Write-Error "❌ EXE not found in downloaded artifacts"
+            exit 1
+          }
+          Write-Host "✅ EXE ready for installer packaging"
+
+      - name: Install Inno Setup
+        run: |
+          Write-Host "Installing Inno Setup via Chocolatey..."
+          choco install innosetup --no-progress -y --limit-output
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Failed to install Inno Setup"
+            exit 1
+          }
+          Write-Host "✅ Inno Setup installed"
+
+      - name: Locate ISCC compiler
+        id: iscc
+        run: |
+          $paths = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          $found = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) {
+            Write-Error "❌ ISCC.exe not found in standard locations"
+            Get-ChildItem -Path "C:\Program Files (x86)\Inno Setup 6\" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            Get-ChildItem -Path "C:\Program Files\Inno Setup 6\" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
+          }
+          Write-Host "✅ ISCC found: $found"
+          echo "path=$found" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer
+        run: |
+          & "${{ steps.iscc.outputs.path }}" installer/setup.iss
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Inno Setup build failed (exit code: $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "✅ Installer built successfully"
+
+      - name: Verify installer
+        run: |
+          $installers = Get-ChildItem dist/installer/*_Setup.exe -ErrorAction SilentlyContinue
+          if (-not $installers) {
+            Write-Error "❌ No installer EXE found in dist/installer/"
+            Get-ChildItem dist/installer/ -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "✅ Installer: $($installers[0].Name) ($([math]::Round($installers[0].Length/1MB, 1)) MB)"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DeepSeek_API_Monitor_Installer
+          name: installer
           path: dist/installer/*_Setup.exe
-        continue-on-error: true
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════
+  # Job 3: 创建 GitHub Release
+  # ═══════════════════════════════════════════════════════════════
+  create-release:
+    needs: [build-exe, build-installer]
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files/
+
+      - name: Flatten artifact structure
+        run: |
+          Write-Host "=== Artifacts downloaded ==="
+          Get-ChildItem -Recurse release-files/ | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+            Write-Host "  $($_.FullName) ($($_.Length) bytes)"
+          }
+
+          # 将所有文件展平到 release-files/ 根目录
+          Get-ChildItem -Recurse release-files/ -File | ForEach-Object {
+            $dest = Join-Path "release-files" $_.Name
+            if ($_.FullName -ne $dest) {
+              Copy-Item $_.FullName $dest -Force
+            }
+          }
+          Write-Host "=== Flattened ==="
+          Get-ChildItem release-files/ -File | ForEach-Object { Write-Host "  $($_.Name)" }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -117,8 +210,12 @@ jobs:
 
             ### 📦 下载
 
+            - **安装包**: 下载 `*_Setup.exe`，一键安装（推荐 ✨）
+              - 标准 Windows 安装向导，可选择安装路径
+              - 创建开始菜单快捷方式和桌面快捷方式
+              - 配置自动保存到 `%APPDATA%`，卸载时可选择保留
             - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
-            - **安装包**: 下载 `*_Setup.exe`，一键安装（含桌面快捷方式、开机自启动选项）
+              - 无需安装，配置保存在 EXE 同级目录
 
             ### ✨ 更新内容
 
@@ -132,12 +229,15 @@ jobs:
 
             - Windows 10/11
             - 无需安装 Python
+
+            ---
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)
           files: |
-            dist/DeepSeek_API_Monitor.exe
-            dist/DeepSeek_API_Monitor_portable.zip
-            dist/installer/*_Setup.exe
+            release-files/DeepSeek_API_Monitor.exe
+            release-files/DeepSeek_API_Monitor_portable.zip
+            release-files/*_Setup.exe
           draft: false
           prerelease: false
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
