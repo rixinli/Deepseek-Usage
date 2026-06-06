@@ -10,6 +10,7 @@
 
 命令行参数:
     --mock      使用模拟 API 数据运行（离线预览，无需真实 API Key）
+    --wizard    强制显示首次设置向导（即使已有配置文件）
 """
 
 import sys
@@ -30,6 +31,11 @@ def main() -> None:
     if "--mock" in sys.argv:
         set_mock_mode(True)
         print("[DEV] Mock API 模式已启用 — 使用模拟数据运行")
+
+    if "--wizard" in sys.argv:
+        from src.gui import set_force_wizard  # noqa: E402
+        set_force_wizard(True)
+        print("[DEV] 强制向导模式 — 启动时显示设置向导")
 
     root = tk.Tk()
 

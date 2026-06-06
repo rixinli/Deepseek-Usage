@@ -15,7 +15,14 @@ from .setup_wizard import SetupWizard
 
 # ── 模块级初始化（导入时执行一次）──────────────────────────
 _IS_DEV = is_dev_mode()
+_FORCE_WIZARD = False
 load_env_file()
+
+
+def set_force_wizard(enabled: bool = True) -> None:
+    """设置强制显示设置向导（--wizard 命令行参数）。"""
+    global _FORCE_WIZARD
+    _FORCE_WIZARD = enabled
 
 # 帮助文档 URL
 _USER_GUIDE_URL = "https://github.com/DavidLeeeee/DeepSeek-Usage-Guide"
@@ -131,8 +138,8 @@ class DeepSeekAPIMonitor:
         self._setup_menu()
         self.setup_ui()
 
-        # 首次运行 — 无 API Key 时显示设置向导
-        if not self.config.api_key:
+        # 首次运行 — 无 API Key 时显示设置向导（或 --wizard 强制弹出）
+        if not self.config.api_key or _FORCE_WIZARD:
             self.root.after(500, self._show_setup_wizard)
         elif not self.config.startup_asked:
             # 有 API Key 但首次运行 — 仅询问开机自启动
