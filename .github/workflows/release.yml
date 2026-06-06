@@ -78,7 +78,15 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          $version = (python -c "import re; m = re.search(r'version\s*=\s*\"([^\"]+)\"', open('pyproject.toml').read()); print(m.group(1) if m else '0.0.0')")
+          # Write a temp Python script to extract the version from pyproject.toml
+          @'
+          import re
+          with open("pyproject.toml", encoding="utf-8") as f:
+              content = f.read()
+          m = re.search(r'version\s*=\s*"([^"]+)"', content)
+          print(m.group(1) if m else "0.0.0")
+          '@ | Set-Content -Path extract_version.py -Encoding UTF8
+          $version = (python extract_version.py)
           Write-Host "Version: $version"
           echo "value=$version" >> $env:GITHUB_OUTPUT
 
