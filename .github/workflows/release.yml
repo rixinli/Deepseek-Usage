@@ -257,118 +257,22 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          set -euo pipefail
-          OWNER="Rixinlouis"
-          REPO="Deepseek-Usage"
-          TAG="${{ github.ref_name }}"
-          TOKEN="$GITEE_TOKEN"
-          API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases"
+          # 生成 Release body 文件
+          cat > release_body.md <<'ENDOFBODY'
+          ## DeepSeek API 额度监控
 
-          # 1. 写同步脚本（避免复杂的 bash/python 内联转义）
-          python3 -c "
-import json, os, sys, urllib.request, urllib.error
+          ### 📦 下载
 
-OWNER = '${OWNER}'
-REPO = '${REPO}'
-TAG = '${TAG}'
-TOKEN = os.environ['GITEE_TOKEN']
-BASE = f'https://gitee.com/api/v5/repos/{OWNER}/{REPO}/releases'
+          - **安装包**: 下载 `*_Setup.exe`，一键安装（推荐 ✨）
+          - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
 
-body = '''## DeepSeek API 额度监控 ''' + TAG + '''
+          ### 📖 使用说明
 
-### 📦 下载
+          查看 [用户指南](https://gitee.com/Rixinlouis/Deepseek-Usage/blob/main/docs/USER_GUIDE_CN.md)。
 
-- **安装包**: 下载 \`*_Setup.exe\`，一键安装（推荐 ✨）
-  - 标准 Windows 安装向导，可选择安装路径
-  - 创建开始菜单快捷方式和桌面快捷方式
-  - 配置自动保存到 \`%APPDATA%\`，卸载时可选择保留
-- **便携版**: 下载 \`DeepSeek_API_Monitor_portable.zip\`，解压即用
-  - 无需安装，配置保存在 EXE 同级目录
+          ### 🔧 系统要求
+          - Windows 10/11，无需安装 Python
+          ENDOFBODY
 
-### ✨ 更新内容
-
-查看 [CHANGELOG.md](https://gitee.com/''' + OWNER + '''/''' + REPO + '''/blob/main/CHANGELOG.md) 了解完整更新日志。
-
-### 📖 使用说明
-
-查看 [用户指南](https://gitee.com/''' + OWNER + '''/''' + REPO + '''/blob/main/docs/USER_GUIDE_CN.md)。
-
-### 🔧 系统要求
-
-- Windows 10/11
-- 无需安装 Python'''
-
-# Check existing release
-print(f'Checking for existing release (tag={TAG})...')
-req = urllib.request.Request(f'{BASE}?access_token={TOKEN}')
-with urllib.request.urlopen(req) as r:
-    releases = json.loads(r.read())
-release_id = next((rel['id'] for rel in releases if rel.get('tag_name') == TAG), None)
-
-if release_id:
-    print(f'Release already exists (id={release_id})')
-else:
-    # Create release
-    print('Creating Gitee release...')
-    payload = json.dumps({
-        'access_token': TOKEN,
-        'tag_name': TAG,
-        'name': f'DeepSeek API Monitor {TAG}',
-        'body': body,
-        'target_commitish': 'main',
-        'prerelease': False
-    }).encode()
-    req = urllib.request.Request(BASE, data=payload, headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req) as r:
-        resp = json.loads(r.read())
-    release_id = resp.get('id')
-    print(f'Release created (id={release_id})')
-
-if not release_id:
-    print('❌ Failed to get release ID')
-    sys.exit(1)
-
-# Save release_id for later steps
-with open('gitee_release_id.txt', 'w') as f:
-    f.write(str(release_id))
-print(f'release_id={release_id}')
-"
-
-          RELEASE_ID=$(cat gitee_release_id.txt)
-          echo "Using release_id=${RELEASE_ID}"
-
-          if [ -z "${RELEASE_ID}" ]; then
-            echo "❌ Failed to get release ID (check GITEE_TOKEN permissions)"
-            exit 1
-          fi
-
-          # 3. 上传构建产物
-          echo "Uploading artifacts..."
-          UPLOAD_URL="${API}/${RELEASE_ID}/attach_files?access_token=${TOKEN}"
-
-          for f in release-files/*; do
-            [ -f "$f" ] || continue
-            fname=$(basename "$f")
-            # 跳过 GitHub 的 SHA 文件
-            [[ "$fname" == *.sha256 ]] && continue
-            echo "  Uploading ${fname} ($(du -h "$f" | cut -f1))..."
-
-            for attempt in 1 2; do
-              if curl -sS --fail-with-body -X POST "${UPLOAD_URL}" \
-                -F "file=@${f}" \
-                --connect-timeout 30 --max-time 600 2>&1; then
-                echo "  ✅ ${fname}"
-                break
-              else
-                if [ $attempt -eq 1 ]; then
-                  echo "  ⚠️ Retry ${fname}..."
-                  sleep 10
-                else
-                  echo "  ❌ ${fname} failed"
-                fi
-              fi
-            done
-          done
-
-          echo "✅ Gitee Release synced"
-          echo "🔗 https://gitee.com/${OWNER}/${REPO}/releases"
+          python3 scripts/sync_to_gitee.py "${{ github.ref_name }}" release_body.md release-files/
+          echo "🔗 https://gitee.com/Rixinlouis/Deepseek-Usage/releases"

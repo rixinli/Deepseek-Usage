@@ -313,7 +313,7 @@ class DeepSeekAPIMonitor:
             frame, text=startup_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
 
-        mode_parts = ["v2.3.5"]
+        mode_parts = ["v2.4.0"]
         if _IS_DEV:
             mode_parts.append("dev")
         if is_mock_mode():
@@ -477,7 +477,7 @@ class DeepSeekAPIMonitor:
         messagebox.showinfo(
             "关于 DeepSeek API 额度监控",
             "DeepSeek API 额度监控\n\n"
-            f"版本: v2.3.5"
+            f"版本: v2.4.0"
             f"{' (开发模式)' if _IS_DEV else ''}"
             f"{' (Mock)' if is_mock_mode() else ''}\n\n"
             "实时监控 DeepSeek API 账户余额。\n"
