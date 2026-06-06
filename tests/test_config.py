@@ -12,7 +12,7 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from src.config import is_dev_mode, AppConfig
+from src.config import is_dev_mode, AppConfig, _is_from_dotenv
 
 
 class TestIsDevMode:
@@ -83,15 +83,31 @@ class TestConfigIniFallback:
             assert cfg.api_key == "sk-from-ini"
             assert cfg.refresh_interval == 300
 
-    def test_ini_does_not_override_env(self):
-        """env 已有值时，config.ini 不覆盖。"""
-        env = {"DEEPSEEK_API_KEY": "sk-from-env", "DEEPSEEK_REFRESH_INTERVAL": "60"}
+    def test_ini_overrides_dotenv(self):
+        """.env 注入的值（不在快照中）会被 config.ini 覆盖。"""
+        env = {"DEEPSEEK_API_KEY": "sk-from-dotenv", "DEEPSEEK_REFRESH_INTERVAL": "60"}
         with patch.dict(os.environ, env, clear=True):
+            # clear=True 后所有变量都不在 _ENV_SNAPSHOT 中 → 被视为 .env 注入
             cfg = AppConfig(config_file="test_config.ini")
             with patch("builtins.open", mock_open(read_data=self.INI_CONTENT)):
                 with patch("os.path.exists", return_value=True):
                     cfg.load_ini_fallback()
-            assert cfg.api_key == "sk-from-env"
+            # config.ini 覆盖 .env 的默认值
+            assert cfg.api_key == "sk-from-ini"
+            assert cfg.refresh_interval == 300
+
+    def test_real_env_does_not_override_by_ini(self):
+        """真实 OS 环境变量（在快照中）不会被 config.ini 覆盖。"""
+        env = {"DEEPSEEK_API_KEY": "sk-from-real-os", "DEEPSEEK_REFRESH_INTERVAL": "60"}
+        with patch.dict(os.environ, env, clear=True):
+            cfg = AppConfig(config_file="test_config.ini")
+            # Mock _is_from_dotenv 返回 False → 模拟真实 OS 环境变量
+            with patch("src.config._is_from_dotenv", return_value=False):
+                with patch("builtins.open", mock_open(read_data=self.INI_CONTENT)):
+                    with patch("os.path.exists", return_value=True):
+                        cfg.load_ini_fallback()
+            # 真实 OS 环境变量保持优先
+            assert cfg.api_key == "sk-from-real-os"
             assert cfg.refresh_interval == 60
 
     def test_ini_missing_file_no_error(self):

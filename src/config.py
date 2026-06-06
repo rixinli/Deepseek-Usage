@@ -1,17 +1,17 @@
 r"""配置管理模块 — 统一处理 .env / config.ini / 默认值。
 
 优先级 (从高到低):
-    1. 操作系统环境变量 (os.environ)
-    2. .env 文件  (开发模式，通过 python-dotenv 加载到 os.environ)
-    3. config.ini 文件
+    1. 操作系统环境变量 (os.environ，在应用启动前已设置的真实环境变量)
+    2. config.ini 文件 (用户通过 UI 显式保存的值)
+    3. .env 文件 (开发模式，通过 python-dotenv 加载，仅作初始默认值)
     4. 硬编码默认值
 
 配置文件路径:
     - 便携模式 (EXE 目录可写):   配置存储在 EXE 同级目录
     - 安装模式 (Program Files):  配置存储在 %APPDATA%\DeepSeek API Monitor\
 
-注意: .env 文件通过 load_dotenv() 会将值写入 os.environ，
-      因此第 1 和第 2 在代码中表现为同一来源。
+注意: config.ini 中用户保存的值会覆盖 .env 的同名字段，
+      但不会覆盖应用启动前已存在的真实 OS 环境变量。
 """
 
 from __future__ import annotations
@@ -21,6 +21,17 @@ import os
 import shutil
 import sys
 from pathlib import Path
+
+# ── 模块加载时的 os.environ 快照 ────────────────────────────
+# 用于区分"真实 OS 环境变量"和".env 文件注入的变量"。
+# 快照在 import 时拍摄，早于 load_env_file() 的调用。
+
+_ENV_SNAPSHOT = dict(os.environ)
+
+
+def _is_from_dotenv(key: str) -> bool:
+    """判断环境变量是否由 .env 文件注入（而非真实 OS 环境变量）。"""
+    return key in os.environ and key not in _ENV_SNAPSHOT
 
 
 def is_dev_mode() -> bool:
@@ -131,7 +142,10 @@ class AppConfig:
     # ── INI 文件读取 ──────────────────────────────────────
 
     def _load_from_file(self, path: str) -> bool:
-        """从指定 INI 文件加载配置（仅在 env 未设置对应字段时生效）。
+        """从指定 INI 文件加载配置。
+
+        用户通过 UI 保存的值（config.ini）会覆盖 .env 的默认值，
+        但不会覆盖应用启动前已存在的真实 OS 环境变量。
 
         返回 True 表示成功加载，False 表示文件不存在或读取失败。
         """
@@ -140,12 +154,15 @@ class AppConfig:
         config = configparser.ConfigParser()
         try:
             config.read(path)
-            # API 配置 — 仅在 env 未设置时覆盖
-            if not self.api_key:
-                self.api_key = config.get('API', 'api_key', fallback='')
+            # API Key — config.ini 覆盖 .env，但保留真实 OS 环境变量
+            saved_key = config.get('API', 'api_key', fallback='')
+            if saved_key and (_is_from_dotenv('DEEPSEEK_API_KEY') or not self.api_key):
+                self.api_key = saved_key
+            # 刷新间隔 — 同理
             saved_interval = config.getint('API', 'refresh_interval', fallback=None)
-            if saved_interval and not os.environ.get("DEEPSEEK_REFRESH_INTERVAL"):
-                self.refresh_interval = saved_interval
+            if saved_interval is not None:
+                if _is_from_dotenv('DEEPSEEK_REFRESH_INTERVAL') or not os.environ.get('DEEPSEEK_REFRESH_INTERVAL'):
+                    self.refresh_interval = saved_interval
 
             # 用户偏好设置
             if config.has_section('Settings'):
@@ -172,7 +189,10 @@ class AppConfig:
             return False
 
     def load_ini_fallback(self) -> None:
-        """从配置文件加载（仅在 env 未设置对应字段时生效）。
+        """从配置文件加载。
+
+        用户通过 UI 保存的值会覆盖 .env 的默认值，
+        但不会覆盖真实 OS 环境变量。
 
         自动检测便携/安装模式，优先读取模式对应的路径。
         安装模式下，如果便携路径存在旧配置，自动迁移到 %APPDATA%。

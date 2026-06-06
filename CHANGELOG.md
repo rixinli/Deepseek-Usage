@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] — 2026-06-06
+
+### Added
+- **全新设置向导 UI** — 顶部步骤条 + 底部按钮栏，页面切换更直观
+- **偏好设置页滚动支持** — 小窗口下可鼠标滚轮滚动设置项
+- **API Key 获取链接可点击打开浏览器**
+- `--wizard` 命令行标志，强制弹出设置向导
+
+### Changed
+- 统一字体常量管理，tk 与 ttk 控件字体一致
+- 完成按钮文案简化为「保存」
+
+### Fixed
+- **修复 API Key 保存后重启被 `.env` 覆盖的问题** — config.ini 优先级调整为高于 .env
+- 修复 CI 缺少 ChineseSimplified.isl 导致构建失败
+- 修复 release workflow 中版本提取脚本的 Python 内联转义问题
+
 ## [2.2.1] — 2026-06-06
 
 ### Fixed

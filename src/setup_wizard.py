@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+import webbrowser
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
@@ -21,6 +22,20 @@ _STEPS = [
     {"title": "偏好设置", "icon": "⚙️"},
     {"title": "完成", "icon": "✅"},
 ]
+
+# ── 字体常量 ────────────────────────────────────────────────
+# 统一管理字体，确保 tk 控件与 ttk 控件字体一致
+
+_FONT_FAMILY = "Arial"          # 界面字体
+_FONT_MONO = "Consolas"         # 等宽字体（API Key 输入）
+_FONT_SIZE_NORMAL = 10          # 正文/按钮字号
+_FONT_SIZE_SMALL = 9            # 辅助信息字号
+_FONT_SIZE_TITLE = 14           # 页面标题字号
+_FONT_SIZE_LARGE = 18           # 欢迎页大字
+_FONT_SIZE_STEP = 9             # 步骤条字号
+_FONT_SIZE_LINK = 9             # 链接字号
+_FONT_SIZE_BTN = 10             # 导航按钮字号
+_FONT_SIZE_BTN_SMALL = 9        # 小按钮（跳过/显示/测试）字号
 
 
 class SetupWizard:
@@ -89,7 +104,7 @@ class SetupWizard:
         self.step_title_var = tk.StringVar(value="🎉 欢迎")
         title_label = tk.Label(
             bar, textvariable=self.step_title_var,
-            font=("Arial", 13, "bold"), bg="#f0f0f0", fg="#333",
+            font=(_FONT_FAMILY, _FONT_SIZE_TITLE, "bold"), bg="#f0f0f0", fg="#333",
         )
         title_label.pack(side=tk.LEFT, padx=16, pady=10)
 
@@ -102,7 +117,7 @@ class SetupWizard:
             label = tk.Label(
                 self.step_dots_frame,
                 text=f" {step['icon']} {i+1}. {step['title']} ",
-                font=("Arial", 9),
+                font=(_FONT_FAMILY, _FONT_SIZE_STEP),
                 bg="#f0f0f0",
                 fg="#999" if i > 0 else "#007bff",
             )
@@ -162,7 +177,7 @@ class SetupWizard:
         # 左侧：跳过按钮
         self.skip_btn = tk.Button(
             bar, text="跳过设置", command=self._on_close,
-            font=("Arial", 9), fg="#999", bg="#fafafa",
+            font=(_FONT_FAMILY, _FONT_SIZE_BTN_SMALL), fg="#999", bg="#fafafa",
             relief=tk.FLAT, cursor="hand2",
             activebackground="#f0f0f0", activeforeground="#666",
         )
@@ -175,7 +190,7 @@ class SetupWizard:
         # 上一步按钮
         self.back_btn = tk.Button(
             btn_group, text="◀ 上一步", command=self._on_back,
-            font=("Arial", 10), width=10,
+            font=(_FONT_FAMILY, _FONT_SIZE_BTN), width=10,
             bg="#e9ecef", fg="#333",
             relief=tk.FLAT, cursor="hand2",
             activebackground="#dee2e6",
@@ -185,7 +200,7 @@ class SetupWizard:
         # 下一步 / 完成按钮（主按钮，显眼）
         self.next_btn = tk.Button(
             btn_group, text="下一步 ▶", command=self._on_next,
-            font=("Arial", 10, "bold"), width=12,
+            font=(_FONT_FAMILY, _FONT_SIZE_BTN, "bold"), width=12,
             bg="#007bff", fg="white",
             relief=tk.FLAT, cursor="hand2",
             activebackground="#0069d9", activeforeground="white",
@@ -199,8 +214,8 @@ class SetupWizard:
         content = ttk.Frame(page, padding=30)
         content.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(content, text="🎉 欢迎使用", font=("Arial", 18, "bold")).pack(pady=(10, 5))
-        ttk.Label(content, text="DeepSeek API 额度监控", font=("Arial", 13)).pack(pady=(0, 20))
+        ttk.Label(content, text="🎉 欢迎使用", font=(_FONT_FAMILY, _FONT_SIZE_LARGE, "bold")).pack(pady=(10, 5))
+        ttk.Label(content, text="DeepSeek API 额度监控", font=(_FONT_FAMILY, _FONT_SIZE_TITLE)).pack(pady=(0, 20))
 
         features = [
             "📊 实时监控 DeepSeek API 账户余额和用量",
@@ -209,11 +224,11 @@ class SetupWizard:
             "💾 配置持久化保存，一次设置永久生效",
         ]
         for f in features:
-            ttk.Label(content, text=f, font=("", 11)).pack(anchor=tk.W, pady=6, padx=20)
+            ttk.Label(content, text=f, font=(_FONT_FAMILY, _FONT_SIZE_NORMAL)).pack(anchor=tk.W, pady=6, padx=20)
 
         ttk.Label(
             content, text="\n此向导将引导您完成初始配置。",
-            font=("", 9), foreground="gray",
+            font=(_FONT_FAMILY, _FONT_SIZE_SMALL), foreground="gray",
         ).pack(pady=(20, 0))
 
     def _build_api_key_page(self) -> None:
@@ -221,11 +236,11 @@ class SetupWizard:
         content = ttk.Frame(page, padding=30)
         content.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(content, text="🔑 配置 API Key", font=("Arial", 14, "bold")).pack(pady=(10, 5))
+        ttk.Label(content, text="🔑 配置 API Key", font=(_FONT_FAMILY, _FONT_SIZE_TITLE, "bold")).pack(pady=(10, 5))
         ttk.Label(
             content,
             text="请输入您的 DeepSeek API Key，可从 DeepSeek 开放平台获取。",
-            font=("", 10), wraplength=460,
+            font=(_FONT_FAMILY, _FONT_SIZE_NORMAL), wraplength=460,
         ).pack(pady=(0, 15))
 
         # API Key 输入
@@ -235,61 +250,105 @@ class SetupWizard:
         self.wizard_api_var = tk.StringVar(value=self.api_key)
         self.wizard_api_entry = ttk.Entry(
             entry_frame, textvariable=self.wizard_api_var,
-            show="*", width=40, font=("Consolas", 11),
+            show="*", width=40, font=(_FONT_MONO, _FONT_SIZE_NORMAL),
         )
         self.wizard_api_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.wizard_show_key = False
-        self.wizard_toggle_btn = ttk.Button(
-            entry_frame, text="👁 显示", command=self._wizard_toggle_key, width=8,
+        self.wizard_toggle_btn = tk.Button(
+            entry_frame, text="👁 显示", command=self._wizard_toggle_key,
+            font=(_FONT_FAMILY, _FONT_SIZE_BTN_SMALL), width=8,
+            bg="#e9ecef", fg="#333", relief=tk.FLAT, cursor="hand2",
+            activebackground="#dee2e6",
         )
         self.wizard_toggle_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        # 链接
+        # 链接 — 点击打开浏览器访问 DeepSeek API Key 页面
         link = tk.Label(
             content,
-            text="🔗 获取 API Key: platform.deepseek.com/api_keys",
-            fg="#007bff", font=("", 8, "underline"), cursor="hand2",
+            text="🔗 获取 API Key",
+            fg="#007bff", font=(_FONT_FAMILY, _FONT_SIZE_LINK, "underline"), cursor="hand2",
         )
+        link.bind("<Button-1>", lambda e: webbrowser.open("https://platform.deepseek.com/api_keys"))
         link.pack(anchor=tk.W, padx=10, pady=(8, 20))
 
         # 测试连接
         test_frame = ttk.Frame(content)
         test_frame.pack(fill=tk.X, pady=5, padx=10)
 
-        self.wizard_test_btn = ttk.Button(
+        self.wizard_test_btn = tk.Button(
             test_frame, text="🔍 测试连接", command=self._wizard_test_connection,
+            font=(_FONT_FAMILY, _FONT_SIZE_BTN_SMALL),
+            bg="#e9ecef", fg="#333", relief=tk.FLAT, cursor="hand2",
+            activebackground="#dee2e6",
         )
         self.wizard_test_btn.pack(side=tk.LEFT)
 
         self.wizard_test_status = tk.StringVar(value="")
         ttk.Label(
             test_frame, textvariable=self.wizard_test_status,
-            foreground="gray", font=("", 9),
+            foreground="gray", font=(_FONT_FAMILY, _FONT_SIZE_SMALL),
         ).pack(side=tk.LEFT, padx=(10, 0))
 
     def _build_preferences_page(self) -> None:
         page = self.pages[self.PAGE_PREFERENCES]
-        content = ttk.Frame(page, padding=30)
-        content.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(content, text="⚙️ 偏好设置", font=("Arial", 14, "bold")).pack(pady=(10, 5))
-        ttk.Label(content, text="根据您的使用习惯进行设置。", font=("", 10)).pack(pady=(0, 15))
+        # 外层容器 — 标题和说明不滚动
+        outer = ttk.Frame(page)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(outer, text="⚙️ 偏好设置", font=(_FONT_FAMILY, _FONT_SIZE_TITLE, "bold")).pack(pady=(10, 5))
+        ttk.Label(outer, text="根据您的使用习惯进行设置。", font=(_FONT_FAMILY, _FONT_SIZE_NORMAL)).pack(pady=(0, 5))
+
+        # 可滚动的中间区域 — Canvas + Scrollbar + 内部 Frame
+        canvas_frame = ttk.Frame(outer)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=canvas.yview)
+        scrollable = ttk.Frame(canvas)
+
+        # 更新滚动区域 + 让内部 Frame 宽度跟随 Canvas
+        def _configure_canvas(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        scrollable.bind("<Configure>", _configure_canvas)
+
+        def _configure_frame(event):
+            canvas.itemconfig(canvas_window_id, width=event.width)
+        canvas.bind("<Configure>", _configure_frame)
+
+        canvas_window_id = canvas.create_window((0, 0), window=scrollable, anchor=tk.NW)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 保存 canvas 引用供 _update_scroll_binding 使用
+        self._prefs_canvas = canvas
+
+        # --- 以下内容放入 scrollable ---
+        pad_frame = ttk.Frame(scrollable, padding=(30, 5, 30, 20))
+        pad_frame.pack(fill=tk.BOTH, expand=True)
 
         # 刷新间隔
-        f1 = ttk.LabelFrame(content, text="🔄 刷新间隔", padding=12)
-        f1.pack(fill=tk.X, padx=10, pady=6)
+        f1 = ttk.LabelFrame(pad_frame, text="🔄 刷新间隔", padding=12)
+        f1.pack(fill=tk.X, pady=6)
 
         self.wizard_interval_var = tk.IntVar(value=self.refresh_interval)
         sf = ttk.Frame(f1)
         sf.pack(fill=tk.X)
-        ttk.Spinbox(sf, from_=30, to=600, increment=10,
-                    textvariable=self.wizard_interval_var, width=7).pack(side=tk.LEFT)
-        ttk.Label(sf, text="  秒（推荐 120-300）", font=("", 9), foreground="gray").pack(side=tk.LEFT)
+        spinbox = ttk.Spinbox(sf, from_=30, to=600, increment=10,
+                              textvariable=self.wizard_interval_var, width=7)
+        spinbox.pack(side=tk.LEFT)
+        # 为 Spinbox 设置字体（ttk 控件需通过 style 配置）
+        style = ttk.Style()
+        style.configure("Wizard.TSpinbox", font=(_FONT_FAMILY, _FONT_SIZE_NORMAL))
+        spinbox.configure(style="Wizard.TSpinbox")
+        ttk.Label(sf, text="  秒（推荐 120-300）", font=(_FONT_FAMILY, _FONT_SIZE_SMALL), foreground="gray").pack(side=tk.LEFT)
 
         # 开机自启动
-        f2 = ttk.LabelFrame(content, text="🚀 开机自启动", padding=12)
-        f2.pack(fill=tk.X, padx=10, pady=6)
+        f2 = ttk.LabelFrame(pad_frame, text="🚀 开机自启动", padding=12)
+        f2.pack(fill=tk.X, pady=6)
 
         self.wizard_startup_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -298,8 +357,8 @@ class SetupWizard:
         ).pack(anchor=tk.W)
 
         # 自动监控
-        f3 = ttk.LabelFrame(content, text="📊 自动监控", padding=12)
-        f3.pack(fill=tk.X, padx=10, pady=6)
+        f3 = ttk.LabelFrame(pad_frame, text="📊 自动监控", padding=12)
+        f3.pack(fill=tk.X, pady=6)
 
         self.wizard_auto_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
@@ -312,19 +371,19 @@ class SetupWizard:
         content = ttk.Frame(page, padding=30)
         content.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(content, text="✅ 设置完成", font=("Arial", 18, "bold")).pack(pady=(10, 10))
+        ttk.Label(content, text="✅ 设置完成", font=(_FONT_FAMILY, _FONT_SIZE_LARGE, "bold")).pack(pady=(10, 10))
 
         self.wizard_summary_var = tk.StringVar(value="")
         ttk.Label(
             content, textvariable=self.wizard_summary_var,
-            font=("Consolas", 10), justify=tk.LEFT,
+            font=(_FONT_MONO, _FONT_SIZE_NORMAL), justify=tk.LEFT,
         ).pack(pady=(5, 10))
 
         ttk.Label(
             content,
             text="点击下方「保存并开始使用」完成设置。\n"
                  "您可以随时在菜单「设置 > 偏好设置」中修改以上配置。",
-            font=("", 9), foreground="gray", justify=tk.CENTER,
+            font=(_FONT_FAMILY, _FONT_SIZE_SMALL), foreground="gray", justify=tk.CENTER,
         ).pack(pady=(10, 0))
 
     # ── 页面导航 ─────────────────────────────────────────────
@@ -334,6 +393,7 @@ class SetupWizard:
         self.notebook.select(index)
         self._update_step_indicators()
         self._update_buttons()
+        self._update_scroll_binding()
 
     def _update_step_indicators(self) -> None:
         """更新步骤条：标题 + 高亮当前步骤。"""
@@ -342,11 +402,11 @@ class SetupWizard:
 
         for i, label in enumerate(self.step_dot_labels):
             if i == self.current_page:
-                label.config(fg="#007bff", font=("Arial", 9, "bold"))
+                label.config(fg="#007bff", font=(_FONT_FAMILY, _FONT_SIZE_STEP, "bold"))
             elif i < self.current_page:
-                label.config(fg="#28a745", font=("Arial", 9))
+                label.config(fg="#28a745", font=(_FONT_FAMILY, _FONT_SIZE_STEP))
             else:
-                label.config(fg="#999", font=("Arial", 9))
+                label.config(fg="#999", font=(_FONT_FAMILY, _FONT_SIZE_STEP))
 
     def _update_buttons(self) -> None:
         """更新导航按钮状态。"""
@@ -359,7 +419,7 @@ class SetupWizard:
         # 下一步 / 完成按钮
         if self.current_page == self.PAGE_COMPLETE:
             self.next_btn.config(
-                text="✨ 保存并开始使用",
+                text="保存",
                 command=self._on_finish,
                 bg="#28a745",
                 activebackground="#218838",
@@ -377,6 +437,19 @@ class SetupWizard:
             self.skip_btn.pack(side=tk.LEFT, padx=16, pady=12)
         else:
             self.skip_btn.pack_forget()
+
+    # ── 滚动绑定管理 ─────────────────────────────────────────
+
+    def _update_scroll_binding(self) -> None:
+        """页面切换时管理偏好设置页的鼠标滚轮绑定。"""
+        # 先解绑所有页面的滚轮事件（避免全局污染）
+        self.dialog.unbind_all("<MouseWheel>")
+        # 仅在偏好设置页启用滚轮
+        if self.current_page == self.PAGE_PREFERENCES and hasattr(self, "_prefs_canvas"):
+            canvas = self._prefs_canvas
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            self.dialog.bind_all("<MouseWheel>", _on_mousewheel)
 
     # ── 导航事件 ─────────────────────────────────────────────
 
