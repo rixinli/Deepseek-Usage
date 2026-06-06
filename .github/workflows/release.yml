@@ -264,50 +264,78 @@ jobs:
           TOKEN="$GITEE_TOKEN"
           API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases"
 
-          # 构建 Release 描述
-          cat > /tmp/release_body.md <<BODYEOF
-          ## DeepSeek API 额度监控 ${TAG}
+          # 1. 写同步脚本（避免复杂的 bash/python 内联转义）
+          python3 -c "
+import json, os, sys, urllib.request, urllib.error
 
-          ### 📦 下载
+OWNER = '${OWNER}'
+REPO = '${REPO}'
+TAG = '${TAG}'
+TOKEN = os.environ['GITEE_TOKEN']
+BASE = f'https://gitee.com/api/v5/repos/{OWNER}/{REPO}/releases'
 
-          - **安装包**: 下载 \`*_Setup.exe\`，一键安装（推荐 ✨）
-            - 标准 Windows 安装向导，可选择安装路径
-            - 创建开始菜单快捷方式和桌面快捷方式
-            - 配置自动保存到 \`%APPDATA%\`，卸载时可选择保留
-          - **便携版**: 下载 \`DeepSeek_API_Monitor_portable.zip\`，解压即用
-            - 无需安装，配置保存在 EXE 同级目录
+body = '''## DeepSeek API 额度监控 ''' + TAG + '''
 
-          ### ✨ 更新内容
+### 📦 下载
 
-          查看 [CHANGELOG.md](https://gitee.com/${OWNER}/${REPO}/blob/main/CHANGELOG.md) 了解完整更新日志。
+- **安装包**: 下载 \`*_Setup.exe\`，一键安装（推荐 ✨）
+  - 标准 Windows 安装向导，可选择安装路径
+  - 创建开始菜单快捷方式和桌面快捷方式
+  - 配置自动保存到 \`%APPDATA%\`，卸载时可选择保留
+- **便携版**: 下载 \`DeepSeek_API_Monitor_portable.zip\`，解压即用
+  - 无需安装，配置保存在 EXE 同级目录
 
-          ### 📖 使用说明
+### ✨ 更新内容
 
-          查看 [用户指南](https://gitee.com/${OWNER}/${REPO}/blob/main/docs/USER_GUIDE_CN.md)。
+查看 [CHANGELOG.md](https://gitee.com/''' + OWNER + '''/''' + REPO + '''/blob/main/CHANGELOG.md) 了解完整更新日志。
 
-          ### 🔧 系统要求
+### 📖 使用说明
 
-          - Windows 10/11
-          - 无需安装 Python
-          BODYEOF
+查看 [用户指南](https://gitee.com/''' + OWNER + '''/''' + REPO + '''/blob/main/docs/USER_GUIDE_CN.md)。
 
-          # 1. 检查是否已存在 release
-          echo "Checking for existing release (tag=${TAG})..."
-          RELEASE_ID=$(curl -sS "${API}?access_token=${TOKEN}" | \
-            python3 -c "import sys,json; data=json.load(sys.stdin); print(next((r['id'] for r in data if r.get('tag_name')=='${TAG}'), ''))" 2>/dev/null || echo "")
+### 🔧 系统要求
 
-          if [ -n "${RELEASE_ID}" ]; then
-            echo "Release already exists (id=${RELEASE_ID})"
-          else
-            # 2. 创建 release
-            echo "Creating Gitee release..."
-            BODY_JSON=$(python3 -c "import json; print(json.dumps(open('/tmp/release_body.md').read()))")
-            RESPONSE=$(curl -sS -X POST "${API}" \
-              -H "Content-Type: application/json" \
-              -d "{\"access_token\":\"${TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"DeepSeek API Monitor ${TAG}\",\"body\":${BODY_JSON},\"target_commitish\":\"main\",\"prerelease\":false}")
-            RELEASE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-            echo "Release created (id=${RELEASE_ID})"
-          fi
+- Windows 10/11
+- 无需安装 Python'''
+
+# Check existing release
+print(f'Checking for existing release (tag={TAG})...')
+req = urllib.request.Request(f'{BASE}?access_token={TOKEN}')
+with urllib.request.urlopen(req) as r:
+    releases = json.loads(r.read())
+release_id = next((rel['id'] for rel in releases if rel.get('tag_name') == TAG), None)
+
+if release_id:
+    print(f'Release already exists (id={release_id})')
+else:
+    # Create release
+    print('Creating Gitee release...')
+    payload = json.dumps({
+        'access_token': TOKEN,
+        'tag_name': TAG,
+        'name': f'DeepSeek API Monitor {TAG}',
+        'body': body,
+        'target_commitish': 'main',
+        'prerelease': False
+    }).encode()
+    req = urllib.request.Request(BASE, data=payload, headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(req) as r:
+        resp = json.loads(r.read())
+    release_id = resp.get('id')
+    print(f'Release created (id={release_id})')
+
+if not release_id:
+    print('❌ Failed to get release ID')
+    sys.exit(1)
+
+# Save release_id for later steps
+with open('gitee_release_id.txt', 'w') as f:
+    f.write(str(release_id))
+print(f'release_id={release_id}')
+"
+
+          RELEASE_ID=$(cat gitee_release_id.txt)
+          echo "Using release_id=${RELEASE_ID}"
 
           if [ -z "${RELEASE_ID}" ]; then
             echo "❌ Failed to get release ID (check GITEE_TOKEN permissions)"
