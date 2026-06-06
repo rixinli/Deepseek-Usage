@@ -306,7 +306,7 @@ class DeepSeekAPIMonitor:
             frame, text=startup_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
 
-        mode_text = "v2.2.1 dev" if _IS_DEV else "v2.2.1"
+        mode_text = "v2.3.0 dev" if _IS_DEV else "v2.3.0"
         tk.Label(
             frame, text=mode_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
@@ -464,7 +464,7 @@ class DeepSeekAPIMonitor:
         messagebox.showinfo(
             "关于 DeepSeek API 额度监控",
             "DeepSeek API 额度监控\n\n"
-            f"版本: v2.2.1{' (开发模式)' if _IS_DEV else ''}\n\n"
+            f"版本: v2.3.0{' (开发模式)' if _IS_DEV else ''}\n\n"
             "实时监控 DeepSeek API 账户余额。\n"
             "支持开机自启动、定时刷新、设置持久化。\n\n"
             "开源协议: MIT",
