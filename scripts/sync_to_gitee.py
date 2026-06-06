@@ -5,14 +5,18 @@
 
 需要环境变量:
     GITEE_TOKEN — Gitee 个人访问令牌
+
+依赖:
+    requests (GitHub Actions runner 预装)
 """
 
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
+import time
 from pathlib import Path
+
+import requests
 
 OWNER = "Rixinlouis"
 REPO = "Deepseek-Usage"
@@ -22,9 +26,9 @@ BASE = f"https://gitee.com/api/v5/repos/{OWNER}/{REPO}/releases"
 def create_release(token: str, tag: str, body: str) -> int:
     """创建 Gitee Release，返回 release_id。若已存在则复用。"""
     # 先查是否已存在
-    req = urllib.request.Request(f"{BASE}?access_token={token}")
-    with urllib.request.urlopen(req) as r:
-        releases = json.loads(r.read())
+    resp = requests.get(BASE, params={"access_token": token})
+    resp.raise_for_status()
+    releases = resp.json()
     existing = next((rel for rel in releases if rel.get("tag_name") == tag), None)
     if existing:
         print(f"Release already exists (id={existing['id']}), reusing")
@@ -32,59 +36,49 @@ def create_release(token: str, tag: str, body: str) -> int:
 
     # 创建新 release
     print(f"Creating release for {tag}...")
-    payload = json.dumps({
-        "access_token": token,
-        "tag_name": tag,
-        "name": f"DeepSeek API Monitor {tag}",
-        "body": body,
-        "target_commitish": "main",
-        "prerelease": False,
-    }).encode()
-    req = urllib.request.Request(BASE, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
-        resp = json.loads(r.read())
-    release_id = resp["id"]
+    resp = requests.post(
+        BASE,
+        json={
+            "access_token": token,
+            "tag_name": tag,
+            "name": f"DeepSeek API Monitor {tag}",
+            "body": body,
+            "target_commitish": "main",
+            "prerelease": False,
+        },
+    )
+    resp.raise_for_status()
+    release_id = resp.json()["id"]
     print(f"Release created (id={release_id})")
     return release_id
 
 
 def upload_file(token: str, release_id: int, filepath: Path) -> bool:
-    """上传单个文件到 Gitee Release。"""
-    import http.client
-    import mimetypes
-
-    boundary = "----GiteeUploadBoundary2026"
-    filename = filepath.name.encode("utf-8")
-    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    file_data = filepath.read_bytes()
-
-    body_parts = [
-        f"--{boundary}".encode(),
-        f'Content-Disposition: form-data; name="access_token"'.encode(),
-        b"",
-        token.encode(),
-        f"--{boundary}".encode(),
-        f'Content-Disposition: form-data; name="file"; filename="{filename.decode()}"'.encode(),
-        f"Content-Type: {content_type}".encode(),
-        b"",
-        file_data,
-        f"--{boundary}--".encode(),
-    ]
-    body = b"\r\n".join(body_parts)
-
+    """上传单个文件到 Gitee Release（使用 requests multipart）。"""
     url = f"{BASE}/{release_id}/attach_files"
-    req = urllib.request.Request(url, data=body)
-    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    fname = filepath.name
+    fsize_mb = filepath.stat().st_size / (1024 * 1024)
+
+    print(f"  Uploading {fname} ({fsize_mb:.1f} MB)...", end=" ", flush=True)
+    t0 = time.time()
 
     try:
-        with urllib.request.urlopen(req) as r:
-            resp = json.loads(r.read())
-        print(f"  ✅ {filename.decode()} ({len(file_data)} bytes)")
-        return True
-    except urllib.error.HTTPError as e:
-        print(f"  ❌ {filename.decode()} failed: {e.code} {e.reason}")
-        body = e.read().decode(errors="replace")
-        print(f"     {body[:300]}")
+        with open(filepath, "rb") as f:
+            resp = requests.post(
+                url,
+                data={"access_token": token},
+                files={"file": (fname, f)},
+                timeout=600,
+            )
+        elapsed = time.time() - t0
+        if resp.status_code == 200 or resp.status_code == 201:
+            print(f"✅ ({elapsed:.0f}s)")
+            return True
+        else:
+            print(f"❌ HTTP {resp.status_code}: {resp.text[:200]}")
+            return False
+    except requests.RequestException as e:
+        print(f"❌ {e}")
         return False
 
 
@@ -114,16 +108,23 @@ def main():
     # 1. 创建 release
     release_id = create_release(token, tag, body)
 
-    # 2. 上传文件
+    # 2. 上传文件（按大小排序，先小后大，跳过 .sha256）
     assets = sorted(
         [f for f in asset_dir.iterdir() if f.is_file() and f.suffix != ".sha256"],
         key=lambda f: f.stat().st_size,
     )
-    print(f"Uploading {len(assets)} file(s)...")
+    print(f"\nUploading {len(assets)} file(s) to release #{release_id}...")
+    failed = []
     for asset in assets:
-        upload_file(token, release_id, asset)
+        if not upload_file(token, release_id, asset):
+            failed.append(asset.name)
 
-    print(f"✅ Done: https://gitee.com/{OWNER}/{REPO}/releases")
+    if failed:
+        print(f"\n⚠️  {len(failed)} file(s) failed: {', '.join(failed)}")
+        sys.exit(1)
+    else:
+        print(f"\n✅ All {len(assets)} files uploaded")
+        print(f"🔗 https://gitee.com/{OWNER}/{REPO}/releases")
 
 
 if __name__ == "__main__":
