@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] — 2026-06-06
+
+### Added
+- **Gitee Release 镜像同步** — GitHub Actions 构建完成自动推送到 Gitee，国内满速下载
+
+### Fixed
+- 修复 ruff I001 import 排序问题
+
 ## [2.3.0] — 2026-06-06
 
 ### Added
