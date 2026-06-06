@@ -53,7 +53,12 @@ jobs:
 
       - name: Copy config template
         run: |
+          if (-not (Test-Path deepseek_config.ini.example)) {
+            Write-Error "❌ deepseek_config.ini.example not found in repo root"
+            exit 1
+          }
           Copy-Item deepseek_config.ini.example dist/deepseek_config.ini.example
+          Write-Host "✅ Config template copied to dist/"
 
       - name: Install Inno Setup
         run: |
@@ -78,7 +83,14 @@ jobs:
 
       - name: Create ZIP archive
         run: |
-          Compress-Archive -Path dist/DeepSeek_API_Monitor.exe, dist/deepseek_config.ini.example -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
+          $items = @("dist/DeepSeek_API_Monitor.exe", "dist/deepseek_config.ini.example")
+          $missing = $items | Where-Object { -not (Test-Path $_) }
+          if ($missing) {
+            Write-Error "❌ Missing files for ZIP: $($missing -join ', ')"
+            exit 1
+          }
+          Compress-Archive -Path $items -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
+          Write-Host "✅ ZIP created: dist/DeepSeek_API_Monitor_portable.zip"
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4

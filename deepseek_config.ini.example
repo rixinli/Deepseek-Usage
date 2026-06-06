@@ -1,0 +1,12 @@
+# ============================================
+# DeepSeek API 额度监控 - 配置文件模板
+# ============================================
+# 复制此文件为 deepseek_config.ini 并填入真实值
+#   cp deepseek_config.ini.example deepseek_config.ini
+#
+# 或在程序设置界面中直接配置 API Key
+# ============================================
+
+[API]
+api_key = sk-your-api-key-here
+refresh_interval = 120
