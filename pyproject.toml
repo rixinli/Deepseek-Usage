@@ -1,10 +1,10 @@
 [project]
 name = "deepseek-api-monitor"
-version = "2.1.0"
+version = "2.2.0"
 description = "DeepSeek API 额度监控工具 — GUI 桌面应用"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.28.0",
     "python-dotenv>=1.0.0",
@@ -30,7 +30,7 @@ deepseek-monitor = "deepseek_api_monitor:main"
 # ════════════════════════════════════════════════════════════
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]

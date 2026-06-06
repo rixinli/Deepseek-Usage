@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 2.2.0)'
+        required: true
+        default: '2.2.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Run tests
+        run: |
+          pip install pytest pytest-mock
+          pytest tests/ -v --tb=short
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller DeepSeek_API_Monitor.spec
+
+      - name: Verify EXE exists
+        run: |
+          if (Test-Path dist/DeepSeek_API_Monitor.exe) {
+            Write-Host "✅ EXE built successfully"
+            (Get-Item dist/DeepSeek_API_Monitor.exe).Length
+          } else {
+            Write-Error "❌ EXE not found"
+            exit 1
+          }
+
+      - name: Copy config template
+        run: |
+          Copy-Item deepseek_config.ini.example dist/deepseek_config.ini.example
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress -y
+        continue-on-error: true
+
+      - name: Build installer with Inno Setup
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/setup.iss
+        continue-on-error: true
+
+      - name: List build artifacts
+        run: |
+          Write-Host "=== EXE ==="
+          Get-ChildItem dist/DeepSeek_API_Monitor.exe | Select-Object Name, Length
+          Write-Host "=== Installer ==="
+          if (Test-Path dist/installer/) {
+            Get-ChildItem dist/installer/*.exe | Select-Object Name, Length
+          } else {
+            Write-Host "Installer not built (Inno Setup not available)"
+          }
+
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path dist/DeepSeek_API_Monitor.exe, dist/deepseek_config.ini.example -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeek_API_Monitor
+          path: |
+            dist/DeepSeek_API_Monitor.exe
+            dist/DeepSeek_API_Monitor_portable.zip
+            dist/deepseek_config.ini.example
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeek_API_Monitor_Installer
+          path: dist/installer/*_Setup.exe
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DeepSeek API Monitor ${{ github.ref_name }}
+          body: |
+            ## DeepSeek API 额度监控 ${{ github.ref_name }}
+
+            ### 📦 下载
+
+            - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
+            - **安装包**: 下载 `*_Setup.exe`，一键安装（含桌面快捷方式、开机自启动选项）
+
+            ### ✨ 更新内容
+
+            查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解完整更新日志。
+
+            ### 📖 使用说明
+
+            查看 [用户指南](https://github.com/${{ github.repository }}/blob/main/docs/USER_GUIDE_CN.md)。
+
+            ### 🔧 系统要求
+
+            - Windows 10/11
+            - 无需安装 Python
+          files: |
+            dist/DeepSeek_API_Monitor.exe
+            dist/DeepSeek_API_Monitor_portable.zip
+            dist/installer/*_Setup.exe
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

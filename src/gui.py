@@ -1,5 +1,7 @@
 """DeepSeek API 监控 — GUI 界面 (tkinter)。"""
 
+from __future__ import annotations
+
 import threading
 import time
 import tkinter as tk

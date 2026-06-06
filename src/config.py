@@ -10,11 +10,12 @@
       因此第 1 和第 2 在代码中表现为同一来源。
 """
 
+from __future__ import annotations
+
 import configparser
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def is_dev_mode() -> bool:
@@ -136,7 +137,7 @@ class AppConfig:
         except Exception:
             return False
 
-    def validate_interval(self, interval: int) -> Optional[str]:
+    def validate_interval(self, interval: int) -> str | None:
         """验证刷新间隔是否合法。
 
         Returns:

@@ -3,10 +3,12 @@
 提供 API Key 管理、刷新间隔调整、开机自启动开关等功能。
 """
 
+from __future__ import annotations
+
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
-from typing import Callable
 
 from .monitor import get_api_quota
 

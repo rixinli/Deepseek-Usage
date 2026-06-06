@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] — 2026-06-06
+
+### Fixed
+- 修复 CI 流水线 Python 3.9 兼容性问题（`X | None` 语法需要 `from __future__ import annotations`）
+- 修复 `*.spec` 文件被 `.gitignore` 忽略导致无法构建的问题
+- 修复 `ruff` UP035/UP045 规则（`Callable` 从 `collections.abc` 导入，`Optional[str]` 替换为 `str | None`）
+- 更新 CI 矩阵：Python 3.9 → 3.10/3.11/3.12/3.13
+
+### Added
+- **GitHub Release 工作流** (`.github/workflows/release.yml`) — 标签推送时自动构建 EXE + 安装包并发布 Release
+- `DeepSeek_API_Monitor.spec` 追加入库（构建必需）
+
 ## [2.2.0] — 2026-06-06
 
 ### Added
