@@ -1,6 +1,6 @@
 [project]
 name = "deepseek-api-monitor"
-version = "2.3.2"
+version = "2.3.3"
 description = "DeepSeek API 额度监控工具 — GUI 桌面应用"
 readme = "README.md"
 license = { text = "MIT" }
