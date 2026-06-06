@@ -13,7 +13,6 @@ from tkinter import messagebox, ttk
 
 from .monitor import get_api_quota
 
-
 # ── 步骤定义 ────────────────────────────────────────────────
 
 _STEPS = [
