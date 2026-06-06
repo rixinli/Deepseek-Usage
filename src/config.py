@@ -55,6 +55,10 @@ class AppConfig:
         self.refresh_interval: int = int(
             os.environ.get("DEEPSEEK_REFRESH_INTERVAL", str(self.DEFAULT_REFRESH_INTERVAL))
         )
+        # 用户偏好设置（默认值）
+        self.startup_enabled: bool = False
+        self.startup_asked: bool = False
+        self.auto_monitor: bool = False
 
     def load_ini_fallback(self) -> None:
         """从 config.ini 加载配置（仅在 env 未设置对应字段时生效）。
@@ -66,25 +70,65 @@ class AppConfig:
         config = configparser.ConfigParser()
         try:
             config.read(self.config_file)
+            # API 配置
             if not self.api_key:
                 self.api_key = config.get('API', 'api_key', fallback='')
             saved_interval = config.getint('API', 'refresh_interval', fallback=None)
             if saved_interval and not os.environ.get("DEEPSEEK_REFRESH_INTERVAL"):
                 self.refresh_interval = saved_interval
+
+            # 用户偏好设置
+            if config.has_section('Settings'):
+                self.startup_enabled = config.getboolean(
+                    'Settings', 'startup_enabled', fallback=False
+                )
+                self.startup_asked = config.getboolean(
+                    'Settings', 'startup_asked', fallback=False
+                )
+                self.auto_monitor = config.getboolean(
+                    'Settings', 'auto_monitor', fallback=False
+                )
         except Exception:
             pass
 
-    def save(self, api_key: str, refresh_interval: int) -> bool:
+    def save(self, api_key: str | None = None, refresh_interval: int | None = None) -> bool:
         """保存配置到 config.ini。
+
+        仅更新传入的非 None 字段，未传入的字段保持当前值。
 
         Returns:
             True 表示成功，False 表示失败。
         """
         config = configparser.ConfigParser()
-        config['API'] = {
-            'api_key': api_key,
-            'refresh_interval': str(refresh_interval),
-        }
+
+        # 读取现有配置（如果存在），以便保留未修改的字段
+        if os.path.exists(self.config_file):
+            try:
+                config.read(self.config_file)
+            except Exception:
+                pass
+
+        # 更新 API 配置
+        if not config.has_section('API'):
+            config.add_section('API')
+        _api_key = api_key if api_key is not None else self.api_key
+        _interval = refresh_interval if refresh_interval is not None else self.refresh_interval
+        config.set('API', 'api_key', _api_key)
+        config.set('API', 'refresh_interval', str(_interval))
+
+        # 更新用户偏好设置
+        if not config.has_section('Settings'):
+            config.add_section('Settings')
+        config.set('Settings', 'startup_enabled', str(self.startup_enabled).lower())
+        config.set('Settings', 'startup_asked', str(self.startup_asked).lower())
+        config.set('Settings', 'auto_monitor', str(self.auto_monitor).lower())
+
+        # 更新内存中的值
+        if api_key is not None:
+            self.api_key = api_key
+        if refresh_interval is not None:
+            self.refresh_interval = refresh_interval
+
         try:
             with open(self.config_file, 'w') as f:
                 config.write(f)

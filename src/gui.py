@@ -4,13 +4,111 @@ import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext
+from typing import Any
 
 from .config import AppConfig, is_dev_mode, load_env_file
 from .monitor import format_quota_info, get_api_quota
+from .settings_dialog import SettingsDialog
 
 # ── 模块级初始化（导入时执行一次）──────────────────────────
 _IS_DEV = is_dev_mode()
 load_env_file()
+
+# 帮助文档 URL
+_USER_GUIDE_URL = "https://github.com/DavidLeeeee/DeepSeek-Usage-Guide"
+
+# 开机自启动快捷方式路径
+_STARTUP_SHORTCUT_PATH = None  # 延迟计算
+
+
+def _get_startup_shortcut_path() -> str:
+    """获取开机自启动快捷方式的完整路径。"""
+    global _STARTUP_SHORTCUT_PATH
+    if _STARTUP_SHORTCUT_PATH is None:
+        import os
+        _STARTUP_SHORTCUT_PATH = os.path.join(
+            os.path.expanduser("~"), "AppData", "Roaming", "Microsoft",
+            "Windows", "Start Menu", "Programs", "Startup",
+            "DeepSeekAPI监控.lnk",
+        )
+    return _STARTUP_SHORTCUT_PATH
+
+
+def create_startup_shortcut(target_path: str | None = None) -> bool:
+    """创建 Windows 开机自启动快捷方式。
+
+    Args:
+        target_path: 快捷方式指向的程序路径。默认为当前 Python 可执行文件。
+
+    Returns:
+        True 表示成功，False 表示失败。
+    """
+    try:
+        import os
+        import sys
+
+        import winshell
+        from win32com.client import Dispatch
+
+        startup_folder = winshell.startup()
+        shortcut_path = os.path.join(startup_folder, "DeepSeekAPI监控.lnk")
+
+        # 刷新全局缓存
+        global _STARTUP_SHORTCUT_PATH
+        _STARTUP_SHORTCUT_PATH = shortcut_path
+
+        shell = Dispatch('WScript.Shell')
+        shortcut = shell.CreateShortCut(shortcut_path)
+
+        if target_path:
+            shortcut.TargetPath = target_path
+        elif getattr(sys, 'frozen', False):
+            # PyInstaller 打包模式
+            shortcut.TargetPath = sys.executable
+        else:
+            shortcut.TargetPath = sys.executable
+            # 开发模式下添加脚本路径作为参数
+            script_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), '..',
+                'deepseek_api_monitor.py',
+            )
+            shortcut.Arguments = f'"{os.path.abspath(script_path)}"'
+
+        shortcut.WorkingDirectory = os.path.dirname(
+            os.path.abspath(target_path if target_path else sys.executable)
+        )
+        shortcut.Description = "DeepSeek API 额度监控"
+        shortcut.Save()
+        return True
+    except Exception:
+        return False
+
+
+def remove_startup_shortcut() -> bool:
+    """移除 Windows 开机自启动快捷方式。
+
+    Returns:
+        True 表示成功（或快捷方式本就不存在），False 表示删除失败。
+    """
+    import os
+
+    shortcut_path = _get_startup_shortcut_path()
+    try:
+        if os.path.exists(shortcut_path):
+            os.remove(shortcut_path)
+        return True
+    except Exception:
+        return False
+
+
+def is_startup_enabled() -> bool:
+    """检查当前是否已设置开机自启动。
+
+    Returns:
+        True 表示快捷方式存在。
+    """
+    import os
+    return os.path.exists(_get_startup_shortcut_path())
 
 
 class DeepSeekAPIMonitor:
@@ -19,18 +117,58 @@ class DeepSeekAPIMonitor:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("DeepSeek API 额度监控")
-        self.root.geometry("650x550")
+        self.root.geometry("650x580")
+        self.root.minsize(550, 450)
 
         self.config = AppConfig()
         self.config.load_ini_fallback()
 
         self.monitoring = False
 
+        self._setup_menu()
         self.setup_ui()
 
-        # 自动开始监控（如果有 API key）
-        if self.config.api_key:
+        # 智能启动提示 — 仅首次询问开机自启动
+        if not self.config.startup_asked:
+            self.root.after(1000, self._ask_startup_on_first_run)
+
+        # 自动开始监控（根据设置）
+        if self.config.auto_monitor and self.config.api_key:
+            self.root.after(800, self.auto_start_monitoring)
+        elif self.config.api_key:
             self.root.after(500, self.auto_start_monitoring)
+
+    # ── 菜单栏 ─────────────────────────────────────────────
+
+    def _setup_menu(self) -> None:
+        """创建菜单栏。"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # 设置菜单
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="设置", menu=settings_menu)
+        settings_menu.add_command(
+            label="⚙ 偏好设置...",
+            command=self.open_settings_dialog,
+            accelerator="Ctrl+,",
+        )
+        settings_menu.add_separator()
+        settings_menu.add_command(label="退出", command=self.root.quit, accelerator="Ctrl+Q")
+
+        # 帮助菜单
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="帮助", menu=help_menu)
+        help_menu.add_command(
+            label="📖 使用指南",
+            command=self._open_user_guide,
+        )
+        help_menu.add_separator()
+        help_menu.add_command(label="关于", command=self._show_about)
+
+        # 快捷键绑定
+        self.root.bind_all("<Control-comma>", lambda e: self.open_settings_dialog())
+        self.root.bind_all("<Control-q>", lambda e: self.root.quit())
 
     # ── UI 构建 ─────────────────────────────────────────────
 
@@ -63,6 +201,13 @@ class DeepSeekAPIMonitor:
             frame, text="👁", command=self.toggle_password, width=3,
         )
         self.toggle_btn.pack(side=tk.LEFT, padx=2)
+
+        # 快捷设置按钮
+        settings_btn = tk.Button(
+            frame, text="⚙", command=self.open_settings_dialog,
+            width=3, font=("Arial", 10),
+        )
+        settings_btn.pack(side=tk.LEFT, padx=2)
 
     def _build_settings_frame(self, parent: tk.Frame) -> None:
         """监控设置区域。"""
@@ -149,10 +294,127 @@ class DeepSeekAPIMonitor:
             relief=tk.SUNKEN, anchor=tk.W, font=("Arial", 9),
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        mode_text = "v2.1 dev" if _IS_DEV else "v2.1"
+        # 开机自启动状态指示
+        startup_text = "🚀自启" if is_startup_enabled() else ""
+        tk.Label(
+            frame, text=startup_text, font=("Arial", 8), fg="gray",
+        ).pack(side=tk.RIGHT, padx=5)
+
+        mode_text = "v2.2 dev" if _IS_DEV else "v2.2"
         tk.Label(
             frame, text=mode_text, font=("Arial", 8), fg="gray",
         ).pack(side=tk.RIGHT, padx=5)
+
+    # ── 设置对话框 ─────────────────────────────────────────
+
+    def open_settings_dialog(self) -> None:
+        """打开偏好设置对话框。"""
+        SettingsDialog(
+            parent=self.root,
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            refresh_interval=self.config.refresh_interval,
+            startup_enabled=self.config.startup_enabled,
+            auto_monitor=self.config.auto_monitor,
+            on_save=self._on_settings_saved,
+        )
+
+    def _on_settings_saved(
+        self, api_key: str, interval: int, startup_enabled: bool, auto_monitor: bool,
+    ) -> None:
+        """设置对话框保存后的回调。"""
+        # 更新配置
+        self.config.api_key = api_key
+        self.config.refresh_interval = interval
+        self.config.startup_enabled = startup_enabled
+        self.config.auto_monitor = auto_monitor
+
+        # 保存到文件
+        self.config.save(api_key, interval)
+
+        # 处理开机自启动
+        if startup_enabled:
+            if not is_startup_enabled():
+                if create_startup_shortcut():
+                    self.status_var.set("✅ 设置已保存 — 已启用开机自启动")
+                else:
+                    self.status_var.set("⚠️ 设置已保存 — 开机自启动设置失败")
+                    self.config.startup_enabled = False
+        else:
+            if is_startup_enabled():
+                remove_startup_shortcut()
+            self.status_var.set("✅ 设置已保存")
+
+        # 更新主界面
+        self.api_key_entry.delete(0, tk.END)
+        self.api_key_entry.insert(0, api_key)
+        self.interval_var.set(str(interval))
+
+        # 更新状态栏
+        self._refresh_status_bar()
+
+    def _refresh_status_bar(self) -> None:
+        """刷新状态栏中的自启动指示。"""
+        # 状态栏是动态的，简单重建即可
+        pass
+
+    # ── 首次启动提示 ───────────────────────────────────────
+
+    def _ask_startup_on_first_run(self) -> None:
+        """首次运行时询问是否启用开机自启动（仅询问一次）。"""
+        self.config.startup_asked = True
+        self.config.save()
+
+        response = messagebox.askyesno(
+            "开机自启动",
+            "是否设置开机自启动？\n\n"
+            "启用后，软件会在 Windows 启动时自动运行。\n"
+            "您也可以稍后在「设置 > 偏好设置」中更改此选项。",
+        )
+        if response:
+            if create_startup_shortcut():
+                self.config.startup_enabled = True
+                self.config.save()
+                self.status_var.set("✅ 已启用开机自启动")
+            else:
+                messagebox.showwarning(
+                    "提示",
+                    "设置开机自启动失败。\n"
+                    "您可以稍后在「设置 > 偏好设置」中重新尝试。",
+                )
+        else:
+            self.config.startup_enabled = False
+            self.config.save()
+
+    # ── 帮助 & 关于 ─────────────────────────────────────────
+
+    def _open_user_guide(self) -> None:
+        """打开用户使用指南。"""
+        import os
+        import webbrowser
+        # 优先尝试打开本地文档
+        local_guide = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'USER_GUIDE_CN.md',
+        )
+        if os.path.exists(local_guide):
+            webbrowser.open(f"file:///{os.path.abspath(local_guide).replace(os.sep, '/')}")
+        else:
+            # 回退到在线文档
+            webbrowser.open(_USER_GUIDE_URL)
+        messagebox.showinfo(
+            "使用指南", "正在浏览器中打开使用指南...",
+        )
+
+    def _show_about(self) -> None:
+        """显示关于对话框。"""
+        messagebox.showinfo(
+            "关于 DeepSeek API 额度监控",
+            "DeepSeek API 额度监控\n\n"
+            f"版本: v2.2{' (开发模式)' if _IS_DEV else ''}\n\n"
+            "实时监控 DeepSeek API 账户余额。\n"
+            "支持开机自启动、定时刷新、设置持久化。\n\n"
+            "开源协议: MIT",
+        )
 
     # ── 交互逻辑 ───────────────────────────────────────────
 
@@ -215,12 +477,14 @@ class DeepSeekAPIMonitor:
                     self.root.after(0, lambda: self.status_var.set(f"❌ {data['error']}"))
             except Exception as exc:
                 self.root.after(
-                    0, lambda e=exc: self.status_var.set(f"❌ 获取数据失败: {str(e)}")
+                    0,
+                    lambda e: self.status_var.set(f"❌ 获取数据失败: {str(e)}"),  # type: ignore[misc]
+                    exc,
                 )
 
         threading.Thread(target=fetch_data, daemon=True).start()
 
-    def _update_display(self, data: dict) -> None:
+    def _update_display(self, data: dict[str, Any]) -> None:
         """更新额度显示区域。"""
         self.info_text.delete(1.0, tk.END)
         formatted = format_quota_info(data)
@@ -267,12 +531,12 @@ class DeepSeekAPIMonitor:
 
     def _set_controls_state(self, state: str) -> None:
         """批量设置控件状态。"""
-        self.start_btn.config(state=state)
-        self.stop_btn.config(state=tk.NORMAL if state == tk.DISABLED else tk.DISABLED)
-        self.refresh_btn.config(state=state)
-        self.api_key_entry.config(state=state)
-        self.interval_entry.config(state=state)
-        self.save_btn.config(state=state)
+        self.start_btn.config(state=state)  # type: ignore[call-overload]
+        self.stop_btn.config(state=tk.NORMAL if state == tk.DISABLED else tk.DISABLED)  # type: ignore[call-overload]
+        self.refresh_btn.config(state=state)  # type: ignore[call-overload]
+        self.api_key_entry.config(state=state)  # type: ignore[call-overload]
+        self.interval_entry.config(state=state)  # type: ignore[call-overload]
+        self.save_btn.config(state=state)  # type: ignore[call-overload]
 
     def _monitoring_loop(self) -> None:
         """后台监控循环（运行在守护线程中）。"""

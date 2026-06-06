@@ -41,7 +41,7 @@ def get_api_quota(
         response = requests.get(endpoint, headers=headers, timeout=timeout)
 
         if response.status_code == 200:
-            data = response.json()
+            data: dict[str, Any] = response.json()
             data['_endpoint'] = endpoint
             return data
         elif response.status_code == 401:

@@ -3,14 +3,14 @@
 注意: 这些测试 mock 了 tkinter，不创建真实窗口。
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch, Mock, MagicMock
 
 import pytest
 
-# 确保项目根目录在 path 中，以便 `import src` 正确解析
+# 确保项目根目录在 path 中
 _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
@@ -21,7 +21,7 @@ sys.modules['tkinter.ttk'] = MagicMock()
 sys.modules['tkinter.scrolledtext'] = MagicMock()
 sys.modules['tkinter.messagebox'] = MagicMock()
 
-from src.gui import DeepSeekAPIMonitor, _IS_DEV
+from src.gui import DeepSeekAPIMonitor
 
 
 @pytest.fixture
@@ -33,29 +33,27 @@ def root_mock():
     return root
 
 
-@pytest.fixture
-def app(root_mock):
-    """创建 DeepSeekAPIMonitor 实例（mock 环境）。"""
-    # 提前设置所有必要的 mock 属性，避免 setup_ui 中报错
-    with patch.dict(os.environ, {}, clear=True):
-        with patch.object(DeepSeekAPIMonitor, 'setup_ui', return_value=None):
-            with patch.object(DeepSeekAPIMonitor, '__init__', lambda self, r: None):
-                # 手动构造最小状态
-                pass
-
-    # 使用更轻量的方式: 跳过 __init__ 中的 UI 构建，手动设置测试所需的属性
+def _make_minimal_app(root_mock):
+    """构造最小化 DeepSeekAPIMonitor 实例用于测试。"""
     app = DeepSeekAPIMonitor.__new__(DeepSeekAPIMonitor)
     app.root = root_mock
     app.config = MagicMock()
     app.config.api_key = ""
     app.config.base_url = "https://api.deepseek.com"
     app.config.refresh_interval = 120
-    app.config.validate_interval = lambda x: (
-        None if 30 <= x <= 600 else "invalid"
-    )
+    app.config.startup_enabled = False
+    app.config.startup_asked = False
+    app.config.auto_monitor = False
+    app.config.validate_interval = lambda x: (None if 30 <= x <= 600 else "invalid")
     app.config.save = MagicMock(return_value=True)
     app.monitoring = False
     return app
+
+
+@pytest.fixture
+def app(root_mock):
+    """创建 DeepSeekAPIMonitor 实例（mock 环境）。"""
+    return _make_minimal_app(root_mock)
 
 
 class TestTogglePassword:
@@ -117,7 +115,7 @@ class TestSaveSettings:
         app.api_key_entry = MagicMock()
         app.api_key_entry.get.return_value = "sk-test"
         app.interval_var = MagicMock()
-        app.interval_var.get.return_value = "abc"  # 非数字
+        app.interval_var.get.return_value = "abc"
 
         with patch('src.gui.messagebox.showerror') as mock_err:
             app.save_settings()
@@ -186,3 +184,56 @@ class TestAutoStart:
         app.auto_start_monitoring()
 
         app.start_monitoring.assert_not_called()
+
+
+class TestSettingsDialogCallback:
+    """设置对话框回调测试。"""
+
+    def test_on_settings_saved_updates_config(self, root_mock):
+        """_on_settings_saved 应更新配置并保存。"""
+        app = _make_minimal_app(root_mock)
+        app.api_key_entry = MagicMock()
+        app.interval_var = MagicMock()
+        app.status_var = MagicMock()
+        app._refresh_status_bar = MagicMock()
+
+        app._on_settings_saved(
+            api_key="sk-new-key",
+            interval=300,
+            startup_enabled=True,
+            auto_monitor=True,
+        )
+
+        assert app.config.api_key == "sk-new-key"
+        assert app.config.refresh_interval == 300
+        assert app.config.startup_enabled is True
+        assert app.config.auto_monitor is True
+        app.config.save.assert_called_once_with("sk-new-key", 300)
+        app.api_key_entry.delete.assert_called()
+        app.interval_var.set.assert_called_with("300")
+
+
+class TestStartupPrompt:
+    """首次启动提示测试。"""
+
+    def test_ask_startup_sets_asked_flag(self, root_mock):
+        """询问后应设置 startup_asked = True。"""
+        app = _make_minimal_app(root_mock)
+        app.status_var = MagicMock()
+
+        app._ask_startup_on_first_run()
+
+        assert app.config.startup_asked is True
+        app.config.save.assert_called()
+
+
+class TestAboutDialog:
+    """关于对话框测试。"""
+
+    def test_show_about_does_not_crash(self, app):
+        """show_about 不应抛出异常。"""
+        with patch('src.gui.messagebox.showinfo') as mock_info:
+            app._show_about()
+            mock_info.assert_called_once()
+            args = mock_info.call_args[0]
+            assert "DeepSeek" in args[0] or "DeepSeek" in args[1]
