@@ -255,72 +255,92 @@ jobs:
       - name: Sync to Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        shell: bash
         run: |
-          $giteeOwner = "Rixinlouis"
-          $giteeRepo = "Deepseek-Usage"
-          $tagName = "${{ github.ref_name }}"
-          $releaseName = "DeepSeek API Monitor $tagName"
+          set -euo pipefail
+          OWNER="Rixinlouis"
+          REPO="Deepseek-Usage"
+          TAG="${{ github.ref_name }}"
+          TOKEN="$GITEE_TOKEN"
+          API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases"
 
-          # 复用 GitHub Release 的描述
-          $releaseBody = @"
-          ## DeepSeek API 额度监控 $tagName
+          # 构建 Release 描述
+          cat > /tmp/release_body.md <<BODYEOF
+          ## DeepSeek API 额度监控 ${TAG}
 
           ### 📦 下载
 
-          - **安装包**: 下载 `*_Setup.exe`, 一键安装（推荐 ✨）
+          - **安装包**: 下载 \`*_Setup.exe\`，一键安装（推荐 ✨）
             - 标准 Windows 安装向导，可选择安装路径
             - 创建开始菜单快捷方式和桌面快捷方式
-            - 配置自动保存到 `%APPDATA%`，卸载时可选择保留
-          - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
+            - 配置自动保存到 \`%APPDATA%\`，卸载时可选择保留
+          - **便携版**: 下载 \`DeepSeek_API_Monitor_portable.zip\`，解压即用
             - 无需安装，配置保存在 EXE 同级目录
 
           ### ✨ 更新内容
 
-          查看 [CHANGELOG.md](https://gitee.com/$giteeOwner/$giteeRepo/blob/main/CHANGELOG.md) 了解完整更新日志。
+          查看 [CHANGELOG.md](https://gitee.com/${OWNER}/${REPO}/blob/main/CHANGELOG.md) 了解完整更新日志。
 
           ### 📖 使用说明
 
-          查看 [用户指南](https://gitee.com/$giteeOwner/$giteeRepo/blob/main/docs/USER_GUIDE_CN.md)。
+          查看 [用户指南](https://gitee.com/${OWNER}/${REPO}/blob/main/docs/USER_GUIDE_CN.md)。
 
           ### 🔧 系统要求
 
           - Windows 10/11
           - 无需安装 Python
-          "@
+          BODYEOF
 
-          Write-Host "Creating Gitee release..."
-          $createBody = @{
-            access_token = $env:GITEE_TOKEN
-            tag_name = $tagName
-            name = $releaseName
-            body = $releaseBody
-            target_commitish = "main"
-            prerelease = $false
-          } | ConvertTo-Json
+          # 1. 检查是否已存在 release
+          echo "Checking for existing release (tag=${TAG})..."
+          RELEASE_ID=$(curl -sS "${API}?access_token=${TOKEN}" | \
+            python3 -c "import sys,json; data=json.load(sys.stdin); print(next((r['id'] for r in data if r.get('tag_name')=='${TAG}'), ''))" 2>/dev/null || echo "")
 
-          $response = Invoke-RestMethod `
-            -Uri "https://gitee.com/api/v5/repos/$giteeOwner/$giteeRepo/releases" `
-            -Method Post `
-            -ContentType "application/json" `
-            -Body $createBody
+          if [ -n "${RELEASE_ID}" ]; then
+            echo "Release already exists (id=${RELEASE_ID})"
+          else
+            # 2. 创建 release
+            echo "Creating Gitee release..."
+            BODY_JSON=$(python3 -c "import json; print(json.dumps(open('/tmp/release_body.md').read()))")
+            RESPONSE=$(curl -sS -X POST "${API}" \
+              -H "Content-Type: application/json" \
+              -d "{\"access_token\":\"${TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"DeepSeek API Monitor ${TAG}\",\"body\":${BODY_JSON},\"target_commitish\":\"main\",\"prerelease\":false}")
+            RELEASE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+            echo "Release created (id=${RELEASE_ID})"
+          fi
 
-          $releaseId = $response.id
-          Write-Host "Gitee release created (id=$releaseId)"
+          if [ -z "${RELEASE_ID}" ]; then
+            echo "❌ Failed to get release ID (check GITEE_TOKEN permissions)"
+            exit 1
+          fi
 
-          # 上传所有构建产物
-          $files = Get-ChildItem release-files/ -File
-          foreach ($file in $files) {
-            Write-Host "Uploading $($file.Name)..."
-            $uploadUrl = "https://gitee.com/api/v5/repos/$giteeOwner/$giteeRepo/releases/$releaseId/attach_files"
-            Invoke-RestMethod `
-              -Uri $uploadUrl `
-              -Method Post `
-              -Form @{
-                access_token = $env:GITEE_TOKEN
-                file = Get-Item $file.FullName
-              }
-            Write-Host "  ✅ $($file.Name) uploaded"
-          }
+          # 3. 上传构建产物
+          echo "Uploading artifacts..."
+          UPLOAD_URL="${API}/${RELEASE_ID}/attach_files?access_token=${TOKEN}"
 
-          Write-Host "✅ All files synced to Gitee Release"
-          Write-Host "🔗 https://gitee.com/$giteeOwner/$giteeRepo/releases"
+          for f in release-files/*; do
+            [ -f "$f" ] || continue
+            fname=$(basename "$f")
+            # 跳过 GitHub 的 SHA 文件
+            [[ "$fname" == *.sha256 ]] && continue
+            echo "  Uploading ${fname} ($(du -h "$f" | cut -f1))..."
+
+            for attempt in 1 2; do
+              if curl -sS --fail-with-body -X POST "${UPLOAD_URL}" \
+                -F "file=@${f}" \
+                --connect-timeout 30 --max-time 600 2>&1; then
+                echo "  ✅ ${fname}"
+                break
+              else
+                if [ $attempt -eq 1 ]; then
+                  echo "  ⚠️ Retry ${fname}..."
+                  sleep 10
+                else
+                  echo "  ❌ ${fname} failed"
+                fi
+              fi
+            done
+          done
+
+          echo "✅ Gitee Release synced"
+          echo "🔗 https://gitee.com/${OWNER}/${REPO}/releases"
