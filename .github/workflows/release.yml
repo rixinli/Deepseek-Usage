@@ -257,6 +257,8 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
+          pip install requests -q
+
           # 生成 Release body 文件
           cat > release_body.md <<'ENDOFBODY'
           ## DeepSeek API 额度监控
