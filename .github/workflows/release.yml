@@ -259,7 +259,7 @@ jobs:
         continue-on-error: true
         run: |
           git remote add gitee-tag "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
-          git -c "credential.helper=!f() { echo username=Rixinlouis; echo password=$GITEE_TOKEN; }; f" \
+          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
             push gitee-tag "${{ github.ref_name }}" --force
 
       # ── 同步到 Gitee Release（国内用户满速下载）──────

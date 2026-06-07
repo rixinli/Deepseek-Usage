@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           git remote add gitee "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
-          git -c "credential.helper=!f() { echo username=Rixinlouis; echo password=$GITEE_TOKEN; }; f" \
+          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
             push gitee main --force
           echo "[OK] main branch mirrored to Gitee"
 
@@ -75,6 +75,6 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          git -c "credential.helper=!f() { echo username=Rixinlouis; echo password=$GITEE_TOKEN; }; f" \
+          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
             push gitee --tags --force
           echo "[OK] tags mirrored to Gitee"
