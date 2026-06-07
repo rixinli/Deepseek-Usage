@@ -341,7 +341,15 @@ def mirror_to_gitee(version: str, assets: list[Path], body: str):
 
     # 2. 推送源码 main 分支 + tags
     print("\n  --- Push source to Gitee ---")
-    run(["git", "remote", "add", "gitee", f"https://gitee.com/{gitee_login}/{GITEE_REPO}.git"])
+    # 检查 remote 是否已存在
+    result = subprocess.run(
+        ["git", "remote", "get-url", "gitee"],
+        capture_output=True, text=True, cwd=ROOT,
+    )
+    if result.returncode == 0:
+        run(["git", "remote", "set-url", "gitee", f"https://gitee.com/{gitee_login}/{GITEE_REPO}.git"])
+    else:
+        run(["git", "remote", "add", "gitee", f"https://gitee.com/{gitee_login}/{GITEE_REPO}.git"])
     # credential store
     cred_path = Path.home() / ".git-credentials"
     old_cred = cred_path.read_text(encoding="utf-8") if cred_path.exists() else ""
