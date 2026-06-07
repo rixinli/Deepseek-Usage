@@ -480,6 +480,7 @@ def main():
     parser.add_argument("--skip-gitee", action="store_true", help="Skip Gitee mirror")
     parser.add_argument("--skip-tests", action="store_true", help="Skip pytest")
     parser.add_argument("--dry-run", action="store_true", help="Print steps without executing")
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip all confirmations")
     args = parser.parse_args()
 
     version: str = args.version
@@ -500,7 +501,7 @@ def main():
     if result.stdout.strip():
         print("[WARN] Uncommitted changes:")
         print(result.stdout)
-        if not confirm("Continue with uncommitted changes?"):
+        if not args.yes and not confirm("Continue with uncommitted changes?"):
             sys.exit(0)
 
     # on main branch
@@ -509,7 +510,7 @@ def main():
     )
     branch = result.stdout.strip()
     if branch != "main":
-        if not confirm(f"You are on '{branch}', not 'main'. Continue?"):
+        if not args.yes and not confirm(f"You are on '{branch}', not 'main'. Continue?"):
             sys.exit(0)
 
     print("  [OK]")
@@ -556,8 +557,16 @@ def main():
     # ── 5. Commit + Tag + Push ───────────────────────────────────
     print("\n--- Commit and push ---")
     run(["git", "add", "-A"])
-    run(["git", "commit", "-m", f"release: v{version}"])
-    run(["git", "tag", "-a", tag, "-m", f"v{version}"])
+    # 只有有变更时才 commit（构建产物在 .gitignore 里，可能没有变更）
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        capture_output=True, cwd=ROOT,
+    )
+    if result.returncode != 0:
+        run(["git", "commit", "-m", f"release: v{version}"])
+    else:
+        print("  (no changes to commit)")
+    run(["git", "tag", "-f", "-a", tag, "-m", f"v{version}"])
     run(["git", "push", "origin", "main", "--tags"])
     print("  [OK] Pushed to GitHub")
 
