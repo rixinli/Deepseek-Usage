@@ -250,31 +250,50 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── Push source tag to Gitee ────────────────────
+
+      - name: Push tag to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        shell: bash
+        continue-on-error: true
+        run: |
+          git remote add gitee-tag "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git"
+          git push gitee-tag "${{ github.ref_name }}" --force
+
       # ── 同步到 Gitee Release（国内用户满速下载）──────
 
       - name: Sync to Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
+        continue-on-error: true
         run: |
           pip install requests -q
+          python3 scripts/sync_to_gitee.py \
+            "${{ github.ref_name }}" \
+            release-files/ \
+            --body "$(cat <<'BODYEOF'
+          - **安装包** (`*_Setup.exe`): 双击运行，标准 Windows 安装向导（推荐 ✨）
+            - 可选择安装路径，创建快捷方式，配置自动保存
+          - **便携版** (`DeepSeek_API_Monitor_portable.zip`): 解压即用，无需安装
+            - 配置保存在 EXE 同级目录
 
-          # 生成 Release body 文件
-          cat > release_body.md <<'ENDOFBODY'
-          ## DeepSeek API 额度监控
+          ### ✨ 更新内容
 
-          ### 📦 下载
-
-          - **安装包**: 下载 `*_Setup.exe`，一键安装（推荐 ✨）
-          - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
+          查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解完整更新日志。
 
           ### 📖 使用说明
 
-          查看 [用户指南](https://gitee.com/Rixinlouis/Deepseek-Usage/blob/main/docs/USER_GUIDE_CN.md)。
+          查看 [用户指南](https://github.com/${{ github.repository }}/blob/main/docs/USER_GUIDE_CN.md)。
 
           ### 🔧 系统要求
-          - Windows 10/11，无需安装 Python
-          ENDOFBODY
 
-          python3 scripts/sync_to_gitee.py "${{ github.ref_name }}" release_body.md release-files/
-          echo "🔗 https://gitee.com/Rixinlouis/Deepseek-Usage/releases"
+          - Windows 10 / 11
+          - 无需安装 Python
+
+          ---
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          BODYEOF
+          )"

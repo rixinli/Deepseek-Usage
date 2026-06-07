@@ -45,3 +45,34 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════════
+  # 源码镜像到 Gitee（测试通过后推送，仅 main 分支）
+  # ═══════════════════════════════════════════════════════════════
+  mirror-to-gitee:
+    needs: test
+    runs-on: windows-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史，确保 tags 可用
+
+      - name: Push main branch to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        shell: bash
+        run: |
+          git remote add gitee "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git"
+          git push gitee main --force
+          echo "[OK] main branch mirrored to Gitee"
+
+      - name: Push tags to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        shell: bash
+        run: |
+          git push gitee --tags --force
+          echo "[OK] tags mirrored to Gitee"
