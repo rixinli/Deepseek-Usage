@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] — 2026-06-07
+
+### Added
+- **完整 Gitee-GitHub 同步链路** — CI 测试通过后自动镜像源码到 Gitee，发布时同步 Release 内容一致
+- Gitee 大文件通过 git push 传输到 dist 分支，绕过 API 上传限制
+
+### Fixed
+- 修复 Gitee 认证方式，使用 credential store 替代 URL 内嵌 token
+- Gitee Release 下载列表过滤掉多余的 `deepseek_config.ini.example`
+
 ## [2.3.1] — 2026-06-06
 
 ### Added

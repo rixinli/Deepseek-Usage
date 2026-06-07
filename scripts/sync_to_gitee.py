@@ -150,9 +150,20 @@ def main():
         print(f"[FAIL] Asset dir not found: {asset_dir}")
         sys.exit(1)
 
-    # 收集产物（排除 .sha256 校验文件）
+    # 收集产物（排除 .sha256 校验文件和 .ini.example 模板）
+    SKIP_PATTERNS = [".sha256", ".ini.example"]
+
+    def _include(path: Path) -> bool:
+        if not path.is_file():
+            return False
+        for pat in SKIP_PATTERNS:
+            if path.name.endswith(pat):
+                print(f"  [SKIP] {path.name} — matches exclude pattern")
+                return False
+        return True
+
     assets = sorted(
-        [f for f in asset_dir.iterdir() if f.is_file() and f.suffix != ".sha256"],
+        [f for f in asset_dir.iterdir() if _include(f)],
         key=lambda f: f.stat().st_size,
     )
 
