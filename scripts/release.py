@@ -197,32 +197,71 @@ def generate_sha256(assets: list[Path]):
 
 
 def create_github_release(version: str, assets: list[Path], body: str):
-    """使用 gh CLI 创建 GitHub Release。"""
+    """使用 GitHub API 创建 Release（无需 gh CLI）。"""
     print("\n--- Creating GitHub Release ---")
     tag = f"v{version}"
-
-    # 检查 gh 是否已登录
-    result = subprocess.run("gh auth status", capture_output=True, text=True, shell=True)
-    if result.returncode != 0:
-        print("[FAIL] gh CLI not authenticated. Run: gh auth login")
+    github_token = os.environ.get("GITHUB_TOKEN", "")
+    if not github_token:
+        print("[FAIL] GITHUB_TOKEN environment variable not set")
+        print("  Create one at: https://github.com/settings/tokens")
+        print("  Then: set GITHUB_TOKEN=ghp_xxxx")
         sys.exit(1)
 
-    # 创建 release
-    asset_args = []
-    for a in assets:
-        asset_args += ["--attach", str(a)]
+    import requests
 
-    cmd = [
-        "gh", "release", "create", tag,
-        "--title", f"DeepSeek API Monitor {tag}",
-        "--notes", body,
-        "--draft=false",
-        "--prerelease=false",
-    ] + asset_args
+    owner = "rixinli"
+    repo = "Deepseek-Usage"
+    api = f"https://api.github.com/repos/{owner}/{repo}"
 
-    # gh release create 支持文件附件
-    subprocess.run(cmd, cwd=ROOT, text=True)
-    print(f"  [OK] GitHub Release: https://github.com/rixinli/Deepseek-Usage/releases/tag/{tag}")
+    # 1. 创建 Release
+    resp = requests.post(
+        f"{api}/releases",
+        headers={
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+        },
+        json={
+            "tag_name": tag,
+            "name": f"DeepSeek API Monitor {tag}",
+            "body": body,
+            "draft": False,
+            "prerelease": False,
+        },
+    )
+    if resp.status_code not in (200, 201):
+        print(f"[FAIL] Create release: {resp.status_code}")
+        print(resp.text[:500])
+        sys.exit(1)
+
+    release = resp.json()
+    upload_url = release["upload_url"].split("{")[0]
+    print(f"  Release created: {release['html_url']}")
+
+    # 2. 上传附件
+    for asset in assets:
+        name = asset.name
+        content_type = "application/octet-stream"
+        print(f"  Uploading {name} ({asset.stat().st_size / 1e6:.1f} MB)...")
+
+        with open(asset, "rb") as f:
+            resp = requests.post(
+                upload_url,
+                headers={
+                    "Authorization": f"Bearer {github_token}",
+                    "Accept": "application/vnd.github+json",
+                    "Content-Type": content_type,
+                },
+                params={"name": name},
+                data=f,
+                timeout=600,  # 10 min for large files
+            )
+        if resp.status_code in (200, 201):
+            print(f"    [OK] {resp.json().get('browser_download_url', '?')}")
+        else:
+            print(f"    [FAIL] {resp.status_code}: {resp.text[:200]}")
+            sys.exit(1)
+
+    print(f"  [OK] GitHub Release complete")
 
 
 def build_release_body(version: str, is_gitee: bool = False) -> str:
