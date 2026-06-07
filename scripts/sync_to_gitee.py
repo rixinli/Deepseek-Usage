@@ -178,6 +178,26 @@ def main():
 
     # ── 1. 推送构建产物到 Gitee dist 分支 ──────────────────────────
     print("\n--- Step 1: Push artifacts to Gitee dist branch ---")
+
+    # 先用 API 获取真正的登录名
+    import requests as req
+    user_resp = req.get(f"https://gitee.com/api/v5/user?access_token={token}")
+    gitee_login = OWNER  # fallback
+    if user_resp.status_code == 200:
+        gitee_login = user_resp.json().get("login", OWNER)
+        print(f"  Authenticated as: {gitee_login}")
+    else:
+        print(f"  [WARN] Cannot verify token via API (HTTP {user_resp.status_code})")
+        print(f"  {user_resp.text[:200]}")
+
+    # 设置 credential store — 与 CI workflow 完全一致的方式
+    cred_path = Path.home() / ".git-credentials"
+    cred_path.write_text(f"https://{gitee_login}:{token}@gitee.com\n")
+    subprocess.run(
+        ["git", "config", "--global", "credential.helper", "store"],
+        capture_output=True, text=True,
+    )
+
     dist_dir = Path("_gitee_dist")
     if dist_dir.exists():
         shutil.rmtree(dist_dir)
@@ -186,24 +206,21 @@ def main():
     for asset in assets:
         shutil.copy2(asset, dist_dir / asset.name)
 
+    repo_url = f"https://gitee.com/{gitee_login}/{REPO}.git"
     run(["git", "init"], cwd=dist_dir)
     run(["git", "checkout", "-b", "dist"], cwd=dist_dir)
-    run(["git", "remote", "add", "gitee", GITEE_HTTPS], cwd=dist_dir)
+    run(["git", "remote", "add", "gitee", repo_url], cwd=dist_dir)
     run(["git", "add", "."], cwd=dist_dir)
     run(["git", "commit", "-m", f"Release {tag}"], cwd=dist_dir)
-
-    # 用 credential store 认证（比 URL 内嵌更可靠）
-    cred_path = Path.home() / ".git-credentials"
-    cred_path.write_text(f"https://{OWNER}:{token}@gitee.com\n")
 
     # git 对大文件传输比 API 上传可靠得多
     print("  Pushing to Gitee dist branch (may take a while for large files)...")
     try:
-        run(["git", "-c", "credential.helper=store", "push", "gitee", "dist", "--force"], cwd=dist_dir)
+        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
     except SystemExit:
         print("[WARN] First push attempt failed, retrying...")
         time.sleep(2)
-        run(["git", "-c", "credential.helper=store", "push", "gitee", "dist", "--force"], cwd=dist_dir)
+        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
     print("[OK] Artifacts pushed to dist branch")
 
     # ── 2. 构建 Release 正文 ──────────────────────────────────────

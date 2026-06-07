@@ -261,7 +261,6 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
-        continue-on-error: true
         run: |
           # 获取 Gitee 登录名
           GITEE_LOGIN=$(curl -s "https://gitee.com/api/v5/user?access_token=${GITEE_TOKEN}" | \
@@ -282,7 +281,6 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
-        continue-on-error: true
         run: |
           pip install requests -q
           python scripts/sync_to_gitee.py \

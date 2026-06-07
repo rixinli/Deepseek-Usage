@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.6] — 2026-06-07
+
+### Fixed
+- 修复 Gitee credential store 认证方式，统一使用 API 获取登录名
+- 移除 `continue-on-error` 让 Gitee 同步错误可被看到
+- 修复下载链接使用硬编码用户名的问题
+
 ## [2.4.5] — 2026-06-07
 
 ### Fixed
