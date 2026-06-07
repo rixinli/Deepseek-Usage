@@ -25,6 +25,10 @@ GITEE_HTTPS = f"https://gitee.com/{OWNER}/{REPO}.git"
 API_BASE = f"https://gitee.com/api/v5/repos/{OWNER}/{REPO}"
 RELEASES_API = f"{API_BASE}/releases"
 
+# git push 最大重试次数
+MAX_GIT_RETRIES = 3
+GIT_PUSH_TIMEOUT = 300  # 5 分钟超时
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -41,6 +45,35 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
             print(result.stderr[-500:])
         sys.exit(result.returncode)
     return result
+
+
+def run_with_retry(cmd: list[str], max_retries: int = MAX_GIT_RETRIES,
+                   delay: int = 10, **kwargs) -> subprocess.CompletedProcess:
+    """带重试和超时的命令执行，适用于网络不稳定的场景。"""
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        print(f"  [Attempt {attempt}/{max_retries}] {' '.join(cmd[:4])}...")
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=GIT_PUSH_TIMEOUT, **kwargs)
+            if result.returncode == 0:
+                return result
+            last_exc = f"exit code {result.returncode}"
+            if result.stderr:
+                print(f"  stderr: {result.stderr[-300:]}")
+        except subprocess.TimeoutExpired:
+            last_exc = f"timeout ({GIT_PUSH_TIMEOUT}s)"
+            print(f"  [WARN] Command timed out after {GIT_PUSH_TIMEOUT}s")
+        except Exception as e:
+            last_exc = str(e)
+            print(f"  [WARN] Exception: {e}")
+
+        if attempt < max_retries:
+            print(f"  Retrying in {delay}s...")
+            time.sleep(delay)
+        else:
+            print(f"[FAIL] All {max_retries} attempts failed: {last_exc}")
+            sys.exit(1)
 
 
 def api_get(path: str, token: str) -> dict | None:
@@ -150,8 +183,8 @@ def main():
         print(f"[FAIL] Asset dir not found: {asset_dir}")
         sys.exit(1)
 
-    # 收集产物（排除 .sha256 校验文件和 .ini.example 模板）
-    SKIP_PATTERNS = [".sha256", ".ini.example"]
+    # 收集产物（排除 .sha256 校验文件，与 GitHub Release 保持一致）
+    SKIP_PATTERNS = [".sha256"]
 
     def _include(path: Path) -> bool:
         if not path.is_file():
@@ -216,13 +249,12 @@ def main():
     run(["git", "commit", "-m", f"Release {tag}"], cwd=dist_dir)
 
     # git 对大文件传输比 API 上传可靠得多
+    # 使用带重试和超时的 push（解决大文件网络超时问题）
     print("  Pushing to Gitee dist branch (may take a while for large files)...")
-    try:
-        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
-    except SystemExit:
-        print("[WARN] First push attempt failed, retrying...")
-        time.sleep(2)
-        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
+    run_with_retry(
+        ["git", "push", "gitee", "dist", "--force"],
+        cwd=dist_dir,
+    )
     print("[OK] Artifacts pushed to dist branch")
 
     # ── 2. 构建 Release 正文 ──────────────────────────────────────

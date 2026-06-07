@@ -3,13 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (如 2.2.0)'
+        description: "版本号 (如 2.2.0)"
         required: true
-        default: '2.2.0'
+        default: "2.2.0"
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install Python dependencies
         run: |
@@ -97,7 +97,6 @@ jobs:
           path: |
             dist/DeepSeek_API_Monitor.exe
             dist/DeepSeek_API_Monitor_portable.zip
-            dist/deepseek_config.ini.example
           retention-days: 1
 
   # ═══════════════════════════════════════════════════════════════
@@ -190,7 +189,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -255,8 +254,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Push source tag to Gitee ────────────────────
+      # ── 生成 SHA256 校验文件 ────────────────────────
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "release-files/DeepSeek_API_Monitor.exe",
+            "release-files/DeepSeek_API_Monitor_portable.zip"
+          )
+          $installers = Get-ChildItem release-files/*_Setup.exe -ErrorAction SilentlyContinue
+          if ($installers) {
+            $files += $installers[0].FullName
+          }
+          $lines = @()
+          foreach ($f in $files) {
+            if (Test-Path $f) {
+              $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+              $name = Split-Path $f -Leaf
+              $lines += "$hash  $name"
+            }
+          }
+          $lines | Out-File -FilePath release-files/SHA256SUMS.txt -Encoding utf8
+          Write-Host "=== SHA256 checksums ==="
+          Get-Content release-files/SHA256SUMS.txt
 
+      # ── Push source tag to Gitee ────────────────────
       - name: Push tag to Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
@@ -272,21 +294,43 @@ jobs:
           echo "https://${GITEE_LOGIN}:${GITEE_TOKEN}@gitee.com" > ~/.git-credentials
 
           git remote add gitee-tag "https://gitee.com/${GITEE_LOGIN}/Deepseek-Usage.git"
-          git push gitee-tag "${{ github.ref_name }}" --force
-          echo "[OK] tag pushed to Gitee"
+
+          # 带重试的 tag push
+          MAX_RETRIES=3
+          RETRY_DELAY=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "  Push attempt $i/$MAX_RETRIES..."
+            if git push gitee-tag "${{ github.ref_name }}" --force; then
+              echo "[OK] tag pushed to Gitee"
+              break
+            else
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "  [WARN] Attempt $i failed, retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+              else
+                echo "[FAIL] Failed to push tag after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
 
       # ── 同步到 Gitee Release（国内用户满速下载）──────
-
       - name: Sync to Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
           pip install requests -q
-          python scripts/sync_to_gitee.py \
-            "${{ github.ref_name }}" \
-            release-files/ \
-            --body "$(cat <<'BODYEOF'
+
+          # 带重试的同步脚本执行
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "  Sync attempt $i/$MAX_RETRIES..."
+            if python scripts/sync_to_gitee.py \
+              "${{ github.ref_name }}" \
+              release-files/ \
+              --body "$(cat <<'BODYEOF'
           - **安装包** (`*_Setup.exe`): 双击运行，标准 Windows 安装向导（推荐 ✨）
             - 可选择安装路径，创建快捷方式，配置自动保存
           - **便携版** (`DeepSeek_API_Monitor_portable.zip`): 解压即用，无需安装
@@ -309,4 +353,16 @@ jobs:
 
           🤖 Generated with [Claude Code](https://claude.com/claude-code)
           BODYEOF
-          )"
+          )"; then
+              echo "[OK] Synced to Gitee successfully"
+              break
+            else
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "  [WARN] Sync attempt $i failed, retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+              else
+                echo "[FAIL] Sync to Gitee failed after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
