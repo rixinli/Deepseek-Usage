@@ -21,7 +21,7 @@ from pathlib import Path
 
 OWNER = "Rixinlouis"
 REPO = "Deepseek-Usage"
-GITEE_REPO = f"https://{OWNER}:{{token}}@gitee.com/{OWNER}/{REPO}.git"
+GITEE_HTTPS = f"https://gitee.com/{OWNER}/{REPO}.git"
 API_BASE = f"https://gitee.com/api/v5/repos/{OWNER}/{REPO}"
 RELEASES_API = f"{API_BASE}/releases"
 
@@ -175,23 +175,24 @@ def main():
     for asset in assets:
         shutil.copy2(asset, dist_dir / asset.name)
 
-    authenticated_url = GITEE_REPO.format(token=token)
-
     run(["git", "init"], cwd=dist_dir)
     run(["git", "checkout", "-b", "dist"], cwd=dist_dir)
-    run(["git", "remote", "add", "gitee", authenticated_url], cwd=dist_dir)
+    run(["git", "remote", "add", "gitee", GITEE_HTTPS], cwd=dist_dir)
     run(["git", "add", "."], cwd=dist_dir)
     run(["git", "commit", "-m", f"Release {tag}"], cwd=dist_dir)
 
-    # 尝试 push；如果 remote 有不相关的历史，使用 --force
+    # 用 credential store 认证（比 URL 内嵌更可靠）
+    cred_path = Path.home() / ".git-credentials"
+    cred_path.write_text(f"https://{OWNER}:{token}@gitee.com\n")
+
     # git 对大文件传输比 API 上传可靠得多
     print("  Pushing to Gitee dist branch (may take a while for large files)...")
     try:
-        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
+        run(["git", "-c", "credential.helper=store", "push", "gitee", "dist", "--force"], cwd=dist_dir)
     except SystemExit:
-        print("[WARN] First push attempt failed, retrying with force...")
+        print("[WARN] First push attempt failed, retrying...")
         time.sleep(2)
-        run(["git", "push", "gitee", "dist", "--force"], cwd=dist_dir)
+        run(["git", "-c", "credential.helper=store", "push", "gitee", "dist", "--force"], cwd=dist_dir)
     print("[OK] Artifacts pushed to dist branch")
 
     # ── 2. 构建 Release 正文 ──────────────────────────────────────
