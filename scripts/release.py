@@ -107,13 +107,13 @@ def bump_version(new_version: str):
 def run_tests():
     """运行 pytest。"""
     print("\n--- Running tests ---")
-    run("pytest tests/ -v --tb=short")
+    run([sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short"])
 
 
 def build_exe():
     """PyInstaller 构建 EXE。"""
     print("\n--- Building EXE ---")
-    run("pyinstaller DeepSeek_API_Monitor.spec")
+    run([sys.executable, "-m", "PyInstaller", "DeepSeek_API_Monitor.spec"])
     exe = DIST / "DeepSeek_API_Monitor.exe"
     if not exe.exists():
         print(f"[FAIL] EXE not found: {exe}")
@@ -136,10 +136,11 @@ def build_portable_zip(version: str) -> Path:
     if zip_name.exists():
         zip_name.unlink()
 
-    run(
-        f'pwsh -Command "Compress-Archive -Path \'{exe}\', \'{DIST / config_example.name}\' '
-        f"-DestinationPath '{zip_name}'\""
-    )
+    run([
+        "pwsh", "-Command",
+        f"Compress-Archive -Path '{exe}', '{DIST / config_example.name}' "
+        f"-DestinationPath '{zip_name}'"
+    ])
     size_mb = zip_name.stat().st_size / (1024 * 1024)
     print(f"  [OK] {zip_name.name} ({size_mb:.1f} MB)")
     return zip_name
