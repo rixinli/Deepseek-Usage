@@ -187,6 +187,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -280,7 +285,7 @@ jobs:
         continue-on-error: true
         run: |
           pip install requests -q
-          python3 scripts/sync_to_gitee.py \
+          python scripts/sync_to_gitee.py \
             "${{ github.ref_name }}" \
             release-files/ \
             --body "$(cat <<'BODYEOF'

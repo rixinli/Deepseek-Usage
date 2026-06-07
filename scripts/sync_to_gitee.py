@@ -122,7 +122,7 @@ def build_default_body(tag: str, assets: list[Path]) -> str:
 
 ---
 
-\u{1f916} Generated with [Claude Code](https://claude.com/claude-code)
+\U0001f916 Generated with [Claude Code](https://claude.com/claude-code)
 """
 
 
