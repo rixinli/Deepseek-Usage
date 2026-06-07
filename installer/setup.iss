@@ -16,7 +16,7 @@
 
 #define MyAppName "DeepSeek API 额度监控"
 #define MyAppNameEn "DeepSeek API Monitor"
-#define MyAppVersion "2.4.6"
+#define MyAppVersion "2.4.7"
 #define MyAppPublisher "DeepSeek-Usage"
 #define MyAppURL "https://github.com/DavidLeeeee/DeepSeek-Usage"
 #define MyAppExeName "DeepSeek_API_Monitor.exe"

@@ -208,6 +208,8 @@ def main():
 
     repo_url = f"https://gitee.com/{gitee_login}/{REPO}.git"
     run(["git", "init"], cwd=dist_dir)
+    run(["git", "config", "user.email", "ci@deepseek-monitor.local"], cwd=dist_dir)
+    run(["git", "config", "user.name", "GitHub Actions"], cwd=dist_dir)
     run(["git", "checkout", "-b", "dist"], cwd=dist_dir)
     run(["git", "remote", "add", "gitee", repo_url], cwd=dist_dir)
     run(["git", "add", "."], cwd=dist_dir)
