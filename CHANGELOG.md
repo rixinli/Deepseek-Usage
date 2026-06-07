@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] — 2026-06-07
+
+### Added
+- **完整 Gitee 镜像同步** — CI 通过后自动镜像源码，发布时 Gitee Release 与 GitHub 内容一致
+- **SHA256 校验文件** — Release 附带 `SHA256SUMS.txt`
+- **网络重试机制** — Git push 和 API 调用带超时和自动重试
+
+### Changed
+- 大文件通过 credential store + git push 传输到 Gitee dist 分支，绕过 API 上传限制
+- `deepseek_config.ini.example` 从独立下载移除（仍包含在便携版 ZIP 中）
+
+### Fixed
+- 修复 Gitee 用户名大小写匹配问题
+- 修复 Python Unicode escape 语法错误
+- 修复 Git 提交缺少 user config 导致的身份错误
+
 ## [2.4.6] — 2026-06-07
 
 ### Fixed
