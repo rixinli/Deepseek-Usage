@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -49,36 +46,24 @@ jobs:
       - name: Verify EXE exists
         run: |
           if (Test-Path dist/DeepSeek_API_Monitor.exe) {
-            Write-Host "✅ EXE built successfully ($((Get-Item dist/DeepSeek_API_Monitor.exe).Length) bytes)"
+            Write-Host "EXE built successfully ($((Get-Item dist/DeepSeek_API_Monitor.exe).Length) bytes)"
           } else {
-            Write-Error "❌ EXE not found"
+            Write-Error "EXE not found"
             exit 1
           }
 
       - name: Copy config template
         run: |
-          if (-not (Test-Path deepseek_config.ini.example)) {
-            Write-Error "❌ deepseek_config.ini.example not found in repo root"
-            exit 1
-          }
           Copy-Item deepseek_config.ini.example dist/deepseek_config.ini.example
-          Write-Host "✅ Config template copied"
 
       - name: Create portable ZIP
         run: |
-          $items = @("dist/DeepSeek_API_Monitor.exe", "dist/deepseek_config.ini.example")
-          $missing = $items | Where-Object { -not (Test-Path $_) }
-          if ($missing) {
-            Write-Error "❌ Missing files: $($missing -join ', ')"
-            exit 1
-          }
-          Compress-Archive -Path $items -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
-          Write-Host "✅ Portable ZIP created"
+          Compress-Archive -Path @("dist/DeepSeek_API_Monitor.exe", "dist/deepseek_config.ini.example") `
+            -DestinationPath dist/DeepSeek_API_Monitor_portable.zip
 
       - name: Extract version
         id: version
         run: |
-          # Write a temp Python script to extract the version from pyproject.toml
           @'
           import re
           with open("pyproject.toml", encoding="utf-8") as f:
@@ -118,20 +103,13 @@ jobs:
       - name: Verify downloaded EXE
         run: |
           if (-not (Test-Path dist/DeepSeek_API_Monitor.exe)) {
-            Write-Error "❌ EXE not found in downloaded artifacts"
+            Write-Error "EXE not found in downloaded artifacts"
             exit 1
           }
-          Write-Host "✅ EXE ready for installer packaging"
 
       - name: Install Inno Setup
         run: |
-          Write-Host "Installing Inno Setup via Chocolatey..."
           choco install innosetup --no-progress -y --limit-output
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ Failed to install Inno Setup"
-            exit 1
-          }
-          Write-Host "✅ Inno Setup installed"
 
       - name: Locate ISCC compiler
         id: iscc
@@ -142,32 +120,14 @@ jobs:
           )
           $found = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $found) {
-            Write-Error "❌ ISCC.exe not found in standard locations"
-            Get-ChildItem -Path "C:\Program Files (x86)\Inno Setup 6\" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-            Get-ChildItem -Path "C:\Program Files\Inno Setup 6\" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            Write-Error "ISCC.exe not found"
             exit 1
           }
-          Write-Host "✅ ISCC found: $found"
           echo "path=$found" >> $env:GITHUB_OUTPUT
 
       - name: Build installer
         run: |
           & "${{ steps.iscc.outputs.path }}" installer/setup.iss
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ Inno Setup build failed (exit code: $LASTEXITCODE)"
-            exit 1
-          }
-          Write-Host "✅ Installer built successfully"
-
-      - name: Verify installer
-        run: |
-          $installers = Get-ChildItem dist/installer/*_Setup.exe -ErrorAction SilentlyContinue
-          if (-not $installers) {
-            Write-Error "❌ No installer EXE found in dist/installer/"
-            Get-ChildItem dist/installer/ -ErrorAction SilentlyContinue
-            exit 1
-          }
-          Write-Host "✅ Installer: $($installers[0].Name) ($([math]::Round($installers[0].Length/1MB, 1)) MB)"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -177,7 +137,7 @@ jobs:
           retention-days: 1
 
   # ═══════════════════════════════════════════════════════════════
-  # Job 3: 创建 GitHub Release + Gitee Release（国内镜像）
+  # Job 3: 创建 GitHub Release
   # ═══════════════════════════════════════════════════════════════
   create-release:
     needs: [build-exe, build-installer]
@@ -198,171 +158,46 @@ jobs:
 
       - name: Flatten artifact structure
         run: |
-          Write-Host "=== Artifacts downloaded ==="
-          Get-ChildItem -Recurse release-files/ | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
-            Write-Host "  $($_.FullName) ($($_.Length) bytes)"
-          }
-
-          # 将所有文件展平到 release-files/ 根目录
           Get-ChildItem -Recurse release-files/ -File | ForEach-Object {
             $dest = Join-Path "release-files" $_.Name
             if ($_.FullName -ne $dest) {
               Copy-Item $_.FullName $dest -Force
             }
           }
-          Write-Host "=== Flattened ==="
           Get-ChildItem release-files/ -File | ForEach-Object { Write-Host "  $($_.Name)" }
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem release-files/ -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" }
+          $lines = foreach ($f in $files) {
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($f.Name)"
+          }
+          $lines | Out-File -FilePath release-files/SHA256SUMS.txt -Encoding utf8
+          Get-Content release-files/SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: DeepSeek API Monitor ${{ github.ref_name }}
+          name: DeepSeek API Monitor ${{ github.ref_name || 'Manual' }}
           body: |
-            ## DeepSeek API 额度监控 ${{ github.ref_name }}
+            ## DeepSeek API 额度监控
 
-            ### 📦 下载
+            ### 下载
 
-            - **安装包**: 下载 `*_Setup.exe`，一键安装（推荐 ✨）
-              - 标准 Windows 安装向导，可选择安装路径
-              - 创建开始菜单快捷方式和桌面快捷方式
-              - 配置自动保存到 `%APPDATA%`，卸载时可选择保留
-            - **便携版**: 下载 `DeepSeek_API_Monitor_portable.zip`，解压即用
-              - 无需安装，配置保存在 EXE 同级目录
+            - **安装包** (`*_Setup.exe`): 双击运行（推荐 ✨）
+            - **便携版** (`*_portable.zip`): 解压即用
+            - `SHA256SUMS.txt`: 校验文件
 
-            ### ✨ 更新内容
-
-            查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解完整更新日志。
-
-            ### 📖 使用说明
-
-            查看 [用户指南](https://github.com/${{ github.repository }}/blob/main/docs/USER_GUIDE_CN.md)。
-
-            ### 🔧 系统要求
-
-            - Windows 10/11
-            - 无需安装 Python
-
-            ---
-            🤖 Generated with [Claude Code](https://claude.com/claude-code)
+            查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解更新内容。
           files: |
             release-files/DeepSeek_API_Monitor.exe
             release-files/DeepSeek_API_Monitor_portable.zip
             release-files/*_Setup.exe
+            release-files/SHA256SUMS.txt
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ── 生成 SHA256 校验文件 ────────────────────────
-      - name: Generate SHA256 checksums
-        shell: pwsh
-        run: |
-          $files = @(
-            "release-files/DeepSeek_API_Monitor.exe",
-            "release-files/DeepSeek_API_Monitor_portable.zip"
-          )
-          $installers = Get-ChildItem release-files/*_Setup.exe -ErrorAction SilentlyContinue
-          if ($installers) {
-            $files += $installers[0].FullName
-          }
-          $lines = @()
-          foreach ($f in $files) {
-            if (Test-Path $f) {
-              $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
-              $name = Split-Path $f -Leaf
-              $lines += "$hash  $name"
-            }
-          }
-          $lines | Out-File -FilePath release-files/SHA256SUMS.txt -Encoding utf8
-          Write-Host "=== SHA256 checksums ==="
-          Get-Content release-files/SHA256SUMS.txt
-
-      # ── Push source tag to Gitee ────────────────────
-      - name: Push tag to Gitee
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        shell: bash
-        run: |
-          # 获取 Gitee 登录名
-          GITEE_LOGIN=$(curl -s "https://gitee.com/api/v5/user?access_token=${GITEE_TOKEN}" | \
-            sed -n 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-          echo "  Gitee login: ${GITEE_LOGIN}"
-
-          # credential store
-          git config --global credential.helper store
-          echo "https://${GITEE_LOGIN}:${GITEE_TOKEN}@gitee.com" > ~/.git-credentials
-
-          git remote add gitee-tag "https://gitee.com/${GITEE_LOGIN}/Deepseek-Usage.git"
-
-          # 带重试的 tag push
-          MAX_RETRIES=3
-          RETRY_DELAY=5
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "  Push attempt $i/$MAX_RETRIES..."
-            if git push gitee-tag "${{ github.ref_name }}" --force; then
-              echo "[OK] tag pushed to Gitee"
-              break
-            else
-              if [ $i -lt $MAX_RETRIES ]; then
-                echo "  [WARN] Attempt $i failed, retrying in ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-              else
-                echo "[FAIL] Failed to push tag after $MAX_RETRIES attempts"
-                exit 1
-              fi
-            fi
-          done
-
-      # ── 同步到 Gitee Release（国内用户满速下载）──────
-      - name: Sync to Gitee Release
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        shell: bash
-        run: |
-          pip install requests -q
-
-          # 带重试的同步脚本执行
-          MAX_RETRIES=3
-          RETRY_DELAY=10
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "  Sync attempt $i/$MAX_RETRIES..."
-            if python scripts/sync_to_gitee.py \
-              "${{ github.ref_name }}" \
-              release-files/ \
-              --body "$(cat <<'BODYEOF'
-          - **安装包** (`*_Setup.exe`): 双击运行，标准 Windows 安装向导（推荐 ✨）
-            - 可选择安装路径，创建快捷方式，配置自动保存
-          - **便携版** (`DeepSeek_API_Monitor_portable.zip`): 解压即用，无需安装
-            - 配置保存在 EXE 同级目录
-
-          ### ✨ 更新内容
-
-          查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解完整更新日志。
-
-          ### 📖 使用说明
-
-          查看 [用户指南](https://github.com/${{ github.repository }}/blob/main/docs/USER_GUIDE_CN.md)。
-
-          ### 🔧 系统要求
-
-          - Windows 10 / 11
-          - 无需安装 Python
-
-          ---
-
-          🤖 Generated with [Claude Code](https://claude.com/claude-code)
-          BODYEOF
-          )"; then
-              echo "[OK] Synced to Gitee successfully"
-              break
-            else
-              if [ $i -lt $MAX_RETRIES ]; then
-                echo "  [WARN] Sync attempt $i failed, retrying in ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-              else
-                echo "[FAIL] Sync to Gitee failed after $MAX_RETRIES attempts"
-                exit 1
-              fi
-            fi
-          done
