@@ -65,8 +65,9 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          git remote add gitee "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git"
-          git push gitee main --force
+          git remote add gitee "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
+          git -c "credential.helper=!f() { echo username=Rixinlouis; echo password=$GITEE_TOKEN; }; f" \
+            push gitee main --force
           echo "[OK] main branch mirrored to Gitee"
 
       - name: Push tags to Gitee
@@ -74,5 +75,6 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          git push gitee --tags --force
+          git -c "credential.helper=!f() { echo username=Rixinlouis; echo password=$GITEE_TOKEN; }; f" \
+            push gitee --tags --force
           echo "[OK] tags mirrored to Gitee"
