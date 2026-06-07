@@ -74,17 +74,23 @@ jobs:
 
           git remote add gitee "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
 
-          # 方案 A: credential helper
-          echo "=== Trying credential helper ==="
-          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' Rixinlouis \"\$GITEE_TOKEN\"" \
-            push gitee main --force && { echo "[OK] main mirrored via credential helper"; exit 0; }
-          echo "[WARN] credential helper failed (exit=$?)"
+          # 方案 A: token 作为 username（OAuth 格式）
+          echo "=== Trying token-as-username ==="
+          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' \"\$GITEE_TOKEN\" \"\$GITEE_TOKEN\"" \
+            push gitee main --force && { echo "[OK]"; exit 0; }
+          echo "[WARN] token-as-username failed"
 
-          # 方案 B: URL 内嵌
-          echo "=== Trying URL-embedded ==="
-          git push "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git" \
-            main --force && { echo "[OK] main mirrored via URL-embedded"; exit 0; }
-          echo "[WARN] URL-embedded failed (exit=$?)"
+          # 方案 B: token 作为 username，空密码
+          echo "=== Trying token-as-username-empty-password ==="
+          git -c "credential.helper=!printf 'username=%s\\npassword=\\n' \"\$GITEE_TOKEN\"" \
+            push gitee main --force && { echo "[OK]"; exit 0; }
+          echo "[WARN] token-as-username-empty-pw failed"
+
+          # 方案 C: 标准 username + token
+          echo "=== Trying Rixinlouis + token ==="
+          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' Rixinlouis \"\$GITEE_TOKEN\"" \
+            push gitee main --force && { echo "[OK]"; exit 0; }
+          echo "[WARN] Rixinlouis + token failed"
 
           echo "[FAIL] All auth methods exhausted for Gitee push"
           exit 1
