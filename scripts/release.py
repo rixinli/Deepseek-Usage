@@ -1,4 +1,4 @@
-"""本地一键发布脚本 — 构建 → GitHub Release → Gitee 镜像。
+"""本地一键发布脚本 - 构建、GitHub Release、Gitee 镜像。
 
 用法:
     python scripts/release.py <version>
@@ -267,7 +267,7 @@ def build_release_body(version: str, is_gitee: bool = False) -> str:
 
 ---
 
-\u{1f916} Generated with [Claude Code](https://claude.com/claude-code)
+\U0001f916 Generated with [Claude Code](https://claude.com/claude-code)
 """
 
 
