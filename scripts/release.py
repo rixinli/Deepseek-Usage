@@ -153,6 +153,7 @@ def build_installer(version: str) -> Path:
     iscc_paths = [
         Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
         Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
+        Path("E:/Inno Setup 6/ISCC.exe"),
     ]
     iscc = next((p for p in iscc_paths if p.exists()), None)
     if not iscc:
