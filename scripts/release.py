@@ -137,7 +137,7 @@ def build_portable_zip(version: str) -> Path:
         zip_name.unlink()
 
     run([
-        "pwsh", "-Command",
+        "powershell", "-Command",
         f"Compress-Archive -Path '{exe}', '{DIST / config_example.name}' "
         f"-DestinationPath '{zip_name}'"
     ])
