@@ -66,15 +66,29 @@ jobs:
         shell: bash
         run: |
           git remote add gitee "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
-          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
-            push gitee main --force
-          echo "[OK] main branch mirrored to Gitee"
+          # 方案 A: credential helper (username + token)
+          # 方案 B: Bearer token header (OAuth2)
+          # 方案 C: URL 内嵌 (兜底)
+          git -c "http.extraHeader=Authorization: Bearer ${GITEE_TOKEN}" \
+            push gitee main --force 2>/dev/null && exit 0
+          echo "[WARN] Bearer auth failed, trying credential helper..."
+          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' Rixinlouis \"\$GITEE_TOKEN\"" \
+            push gitee main --force 2>/dev/null && exit 0
+          echo "[WARN] Credential helper failed, trying URL-embedded..."
+          git -c "credential.helper=" \
+            -c "http.extraHeader=" \
+            push "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git" main --force 2>/dev/null && exit 0
+          echo "[FAIL] All auth methods exhausted for Gitee push"
+          exit 1
 
       - name: Push tags to Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
+          git -c "http.extraHeader=Authorization: Bearer ${GITEE_TOKEN}" \
+            push gitee --tags --force 2>/dev/null && { echo "[OK] tags mirrored to Gitee"; exit 0; }
+          echo "[WARN] Bearer auth failed for tags, trying credential helper..."
+          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' Rixinlouis \"\$GITEE_TOKEN\"" \
             push gitee --tags --force
           echo "[OK] tags mirrored to Gitee"

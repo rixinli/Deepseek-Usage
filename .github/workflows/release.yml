@@ -259,8 +259,16 @@ jobs:
         continue-on-error: true
         run: |
           git remote add gitee-tag "https://gitee.com/Rixinlouis/Deepseek-Usage.git"
-          git -c "credential.helper=!printf 'username=%s\npassword=%s\n' Rixinlouis \"\$GITEE_TOKEN\"" \
-            push gitee-tag "${{ github.ref_name }}" --force
+          # 依次尝试 Bearer / credential helper / URL 内嵌
+          git -c "http.extraHeader=Authorization: Bearer ${GITEE_TOKEN}" \
+            push gitee-tag "${{ github.ref_name }}" --force 2>/dev/null && exit 0
+          echo "[WARN] Bearer failed, trying credential helper..."
+          git -c "credential.helper=!printf 'username=%s\\npassword=%s\\n' Rixinlouis \"\$GITEE_TOKEN\"" \
+            push gitee-tag "${{ github.ref_name }}" --force 2>/dev/null && exit 0
+          echo "[WARN] Credential helper failed, trying URL-embedded..."
+          git push "https://Rixinlouis:${GITEE_TOKEN}@gitee.com/Rixinlouis/Deepseek-Usage.git" \
+            "${{ github.ref_name }}" --force 2>/dev/null && exit 0
+          echo "[FAIL] All Gitee auth methods failed"
 
       # ── 同步到 Gitee Release（国内用户满速下载）──────
 
